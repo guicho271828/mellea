@@ -2,12 +2,13 @@
 
 import abc
 from collections.abc import Callable
+from copy import deepcopy
 from typing import Any
 
 import tqdm
 
 from mellea.helpers.fancy_logger import FancyLogger
-from mellea.stdlib.base import CBlock, GenerateLog, ModelOutputThunk
+from mellea.stdlib.base import CBlock, Component, Context, GenerateLog, ModelOutputThunk
 from mellea.stdlib.instruction import Instruction
 from mellea.stdlib.requirement import Requirement, ValidationResult
 
@@ -23,6 +24,7 @@ class SamplingResult(CBlock):
         sample_generations: list[ModelOutputThunk] | None = None,
         sample_validations: list[list[tuple[Requirement, ValidationResult]]]
         | None = None,
+        sample_actions: list[Component] | None = None,
     ):
         """Initialize a new instance of sampling results.
 
@@ -47,31 +49,40 @@ class SamplingStrategy(abc.ABC):
     """
 
     # the function signature here matches that of m.validate
-    validate: Callable[[list[Requirement], Any], list[ValidationResult]] | None = None
+    validate: (
+        Callable[[list[Requirement], Context, Any], list[ValidationResult]] | None
+    ) = None
 
     generate: (
-        Callable[[Instruction, list[GenerateLog] | None], ModelOutputThunk] | None
+        Callable[[Component, Context, list[GenerateLog] | None], ModelOutputThunk]
+        | None
     ) = None
 
     @abc.abstractmethod
     def sample(
         self,
-        instruction: Instruction,
+        action: Component,
+        context: Context,
         *,
         generate_logs: list[GenerateLog] | None = None,
+        validation_ctx: Context | None = None,
     ) -> SamplingResult:
         """This method is the abstract method for sampling a given instruction.
 
         It must be implemented by any concrete subclasses to provide specific sampling logic.
 
         Args:
-            instruction (Instruction): The instruction object to be sampled.
+            action : The action object to be sampled.
+            context: The context to be passed to the sampling strategy.
             generate_logs: Optional list of GenerateLog objects. If None, no collection happens.
+            validation_ctx: Optional context to use for validation. If None, validation_ctx = ctx.
         """
 
 
 class RejectionSamplingStrategy(SamplingStrategy):
     """Sampling strategy that rejects samples based on given instructions."""
+
+    loop_budget: int
 
     def __init__(
         self,
@@ -79,24 +90,26 @@ class RejectionSamplingStrategy(SamplingStrategy):
         loop_budget: int = 1,
         repair: Callable[
             [
-                Instruction,
+                Component,
+                Context,
                 list[tuple[Requirement, ValidationResult]],
-                list[Instruction],
+                list[Component],
             ],
-            Instruction,
-        ] = lambda i, r, h_i: i,
+            Component,
+        ] = lambda i, c, r, h_i: i,
         select_from_failure: Callable[
             [
-                Instruction,
+                list[Component],
                 list[ModelOutputThunk],
                 list[list[tuple[Requirement, ValidationResult]]],
             ],
-            ModelOutputThunk,
-        ] = lambda _, results, __: results[0],
-        validate: Callable[[list[Requirement], Any], list[ValidationResult]]
+            int,
+        ] = lambda _, results, __: 0,
+        validate: Callable[[list[Requirement], Context, Any], list[ValidationResult]]
         | None = None,
         generate: (
-            Callable[[Instruction, list[GenerateLog] | None], ModelOutputThunk] | None
+            Callable[[Component, Context, list[GenerateLog] | None], ModelOutputThunk]
+            | None
         ) = None,
         requirements: list[Requirement] | None = None,
     ):
@@ -123,17 +136,23 @@ class RejectionSamplingStrategy(SamplingStrategy):
 
     def sample(
         self,
-        instruction: Instruction,
+        action: Component,
+        context: Context,
         *,
         show_progress: bool = True,
         generate_logs: list[GenerateLog] | None = None,
+        requirements: list[Requirement] | None = None,
+        validation_ctx: Context | None = None,
     ) -> SamplingResult:
         """This method performs a sampling operation based on the given instruction.
 
         Args:
-            instruction: The Instruction object containing the instruction to generate a valid model output thunk.
-            show_progress: if true, a tqdm progress bar is used. Otherwise messages will still be sent to flog.
+            action : The action object to be sampled.
+            context: The context to be passed to the sampling strategy.
+            show_progress: if true, a tqdm progress bar is used. Otherwise, messages will still be sent to flog.
             generate_logs: If provided, the generations will be logged.
+            requirements: List of requirements to test against.
+            validation_ctx: Optional context to use for validation. If None, validation_ctx = ctx.
 
         Returns:
             SamplingResult: A result object indicating the success or failure of the sampling process.
@@ -148,68 +167,86 @@ class RejectionSamplingStrategy(SamplingStrategy):
         assert self.validate is not None, "Validation must be provided."
         assert self.generate is not None, "Generate must be provided."
 
+        # just to be sure to not cause issues to the OG context
+        ctx = context.copy()
+        validation_ctx = validation_ctx if validation_ctx is not None else context
+        assert validation_ctx is not None, "Validation context must be provided."
+
         flog = FancyLogger.get_logger()
 
-        failed_results: list[ModelOutputThunk] = []
-        failed_scores: list[list[tuple[Requirement, ValidationResult]]] = []
-        failed_instructions: list[Instruction] = []
+        sampled_results: list[ModelOutputThunk] = []
+        sampled_scores: list[list[tuple[Requirement, ValidationResult]]] = []
+        sampled_actions: list[Component] = []
+
+        if self.requirements is not None:
+            reqs = self.requirements
+            if requirements is not None:
+                flog.warn("Some requirements are ignored.")
+        else:
+            reqs = requirements if requirements is not None else []
 
         loop_count = 0
-
         loop_budget_range_iterator = (
-            tqdm.tqdm(range(self.loop_budget))
+            tqdm.tqdm(range(self.loop_budget))  # type: ignore
             if show_progress
-            else range(self.loop_budget)
+            else range(self.loop_budget)  # type: ignore
         )
+
+        new_action = deepcopy(action)
         for _ in loop_budget_range_iterator:  # type: ignore
             loop_count += 1
             if not show_progress:
                 flog.info(f"Running loop {loop_count} of {self.loop_budget}")
 
-            # run a pass
+            # run a generation pass
+            result = self.generate(new_action, ctx, generate_logs)
 
-            result = self.generate(instruction, generate_logs)
+            # validation pass
+            val_scores = self.validate(reqs, validation_ctx, result)
 
-            if self.requirements is not None:
-                reqs = self.requirements
-            else:
-                reqs = instruction.requirements
-            val_scores = self.validate(reqs, result)
+            # match up reqs with scores
             constraint_scores = list(zip(reqs, val_scores))
 
-            failed_results.append(result)
-            failed_scores.append(constraint_scores)
-            failed_instructions.append(instruction)
+            # collect all data
+            sampled_results.append(result)
+            sampled_scores.append(constraint_scores)
+            sampled_actions.append(new_action)
 
+            # if all vals are true -- break and return success
             if all(bool(s[1]) for s in constraint_scores):
                 flog.info("SUCCESS")
                 return SamplingResult(
                     result,
                     success=True,
-                    sample_generations=failed_results,
-                    sample_validations=failed_scores,
+                    sample_generations=sampled_results,
+                    sample_validations=sampled_scores,
                 )
 
             else:
+                # log partial success and continue
                 count_valid = len([s for s in constraint_scores if bool(s[1])])
                 flog.info(f"FAILED. Valid: {count_valid}/{len(constraint_scores)}")
+
             # If we did not pass all constraints, update the instruction and try again.
-            instruction = self.repair(
-                instruction, constraint_scores, failed_instructions
+            new_action = self.repair(
+                new_action, ctx, constraint_scores, sampled_actions
             )
 
         flog.info(
-            f"Invoking select_from_failure after {len(failed_results)} failed attempts."
+            f"Invoking select_from_failure after {len(sampled_results)} failed attempts."
         )
-        best_failed_result = self.select_from_failure(
-            instruction, failed_results, failed_scores
+
+        # if no valid result could be determined, find a last resort.
+        best_failed_index = self.select_from_failure(
+            sampled_actions, sampled_results, sampled_scores
         )
-        assert best_failed_result in failed_results, (
+        assert best_failed_index < len(sampled_results), (
             "The select_from_failure method did not return a valid result. It has to selected from failed_results."
         )
         return SamplingResult(
-            best_failed_result,
+            sampled_results[best_failed_index],
             success=False,
-            sample_generations=failed_results,
-            sample_validations=failed_scores,
+            sample_generations=sampled_results,
+            sample_validations=sampled_scores,
+            sample_actions=sampled_actions,
         )

@@ -7,8 +7,17 @@ from typing import Any
 
 import tqdm
 
+from mellea import LinearContext
 from mellea.helpers.fancy_logger import FancyLogger
-from mellea.stdlib.base import CBlock, Component, Context, GenerateLog, ModelOutputThunk
+from mellea.stdlib.base import (
+    CBlock,
+    Component,
+    Context,
+    ContextTurn,
+    GenerateLog,
+    ModelOutputThunk,
+)
+from mellea.stdlib.chat import Message
 from mellea.stdlib.instruction import Instruction
 from mellea.stdlib.requirement import Requirement, ValidationResult
 
@@ -79,8 +88,8 @@ class SamplingStrategy(abc.ABC):
         """
 
 
-class RejectionSamplingStrategy(SamplingStrategy):
-    """Sampling strategy that rejects samples based on given instructions."""
+class BaseSamplingStrategy(SamplingStrategy):
+    """Base class for multiple strategies that rejects samples based on given instructions."""
 
     loop_budget: int
 
@@ -90,13 +99,14 @@ class RejectionSamplingStrategy(SamplingStrategy):
         loop_budget: int = 1,
         repair: Callable[
             [
-                Component,
                 Context,
-                list[tuple[Requirement, ValidationResult]],
                 list[Component],
+                list[ModelOutputThunk],
+                list[list[tuple[Requirement, ValidationResult]]],
             ],
             Component,
-        ] = lambda i, c, r, h_i: i,
+        ]
+        | None,
         select_from_failure: Callable[
             [
                 list[Component],
@@ -104,7 +114,8 @@ class RejectionSamplingStrategy(SamplingStrategy):
                 list[list[tuple[Requirement, ValidationResult]]],
             ],
             int,
-        ] = lambda _, results, __: 0,
+        ]
+        | None,
         validate: Callable[[list[Requirement], Context, Any], list[ValidationResult]]
         | None = None,
         generate: (
@@ -127,6 +138,9 @@ class RejectionSamplingStrategy(SamplingStrategy):
             AssertionError: If loop_budget is not greater than 0.
         """
         assert loop_budget > 0, "Loop budget must be at least 1."
+        assert repair is not None, "Repair must be provided."
+        assert select_from_failure is not None, "Select from failure must be provided."
+
         self.loop_budget = loop_budget
         self.repair = repair
         self.select_from_failure = select_from_failure
@@ -229,7 +243,7 @@ class RejectionSamplingStrategy(SamplingStrategy):
 
             # If we did not pass all constraints, update the instruction and try again.
             new_action = self.repair(
-                new_action, ctx, constraint_scores, sampled_actions
+                ctx, sampled_actions, sampled_results, sampled_scores
             )
 
         flog.info(
@@ -250,3 +264,120 @@ class RejectionSamplingStrategy(SamplingStrategy):
             sample_validations=sampled_scores,
             sample_actions=sampled_actions,
         )
+
+
+class RejectionSamplingStrategy(BaseSamplingStrategy):
+    """Simple rejection sampling strategy with optional repair."""
+
+    def __init__(
+        self,
+        *,
+        loop_budget: int = 1,
+        repair: Callable[
+            [
+                list[Component],
+                list[ModelOutputThunk],
+                list[list[tuple[Requirement, ValidationResult]]],
+            ],
+            Component,
+        ] = lambda past_actions, past_results, past_val: past_actions[-1],
+        select_from_failure: Callable[
+            [
+                list[Component],
+                list[ModelOutputThunk],
+                list[list[tuple[Requirement, ValidationResult]]],
+            ],
+            int,
+        ] = lambda past_actions, past_results, past_val: 0,
+        validate: Callable[[list[Requirement], Context, Any], list[ValidationResult]]
+        | None = None,
+        generate: (
+            Callable[[Component, Context, list[GenerateLog] | None], ModelOutputThunk]
+            | None
+        ) = None,
+        requirements: list[Requirement] | None = None,
+    ):
+        def repair_wrapper(_, past_actions, past_results, past_val):
+            return repair(past_actions, past_results, past_val)
+
+        super().__init__(
+            loop_budget=loop_budget,
+            repair=repair_wrapper,
+            select_from_failure=select_from_failure,
+            validate=validate,
+            generate=generate,
+            requirements=requirements,
+        )
+
+
+class AgenticSamplingStrategy(BaseSamplingStrategy):
+    """Rejection sampling strategy with agentic (multi-turn) repair."""
+
+    def __init__(
+        self,
+        *,
+        loop_budget: int = 1,
+        repair: Callable[
+            [
+                Context,
+                list[Component],
+                list[ModelOutputThunk],
+                list[list[tuple[Requirement, ValidationResult]]],
+            ],
+            Component,
+        ]
+        | None = None,
+        select_from_failure: Callable[
+            [
+                list[Component],
+                list[ModelOutputThunk],
+                list[list[tuple[Requirement, ValidationResult]]],
+            ],
+            int,
+        ] = lambda past_actions, past_results, past_val: len(past_actions) - 1,
+        validate: Callable[[list[Requirement], Context, Any], list[ValidationResult]]
+        | None = None,
+        generate: (
+            Callable[[Component, Context, list[GenerateLog] | None], ModelOutputThunk]
+            | None
+        ) = None,
+        requirements: list[Requirement] | None = None,
+    ):
+        if repair is None:
+            repair = AgenticSamplingStrategy.agentic_repair_default
+
+        super().__init__(
+            loop_budget=loop_budget,
+            repair=repair,
+            select_from_failure=select_from_failure,
+            validate=validate,
+            generate=generate,
+            requirements=requirements,
+        )
+
+    @staticmethod
+    def agentic_repair_default(
+        context: Context,
+        past_actions: list[Component],
+        past_results: list[ModelOutputThunk],
+        past_val: list[list[tuple[Requirement, ValidationResult]]],
+    ) -> Component:
+        assert isinstance(context, LinearContext), (
+            " Need linear context to run agentic sampling."
+        )
+
+        # add failed execution to chat history
+        context.insert_turn(ContextTurn(past_actions[-1], past_results[-1]))
+
+        last_failed_reqs: list[Requirement] = [s[0] for s in past_val[-1] if not s[1]]
+        last_failed_reqs_str = "* " + "\n* ".join(
+            [str(r.description) for r in last_failed_reqs]
+        )
+        # TODO: what to do with checks ??
+
+        next_action = Message(
+            role="user",
+            content=f"The following requirements have not been met: \n{last_failed_reqs_str}\n Please try again to fulfill the requirements.",
+        )
+
+        return next_action

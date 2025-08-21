@@ -255,7 +255,7 @@ class BaseSamplingStrategy(SamplingStrategy):
             sampled_actions, sampled_results, sampled_scores
         )
         assert best_failed_index < len(sampled_results), (
-            "The select_from_failure method did not return a valid result. It has to selected from failed_results."
+            "The select_from_failure method did not return a valid result. It has to select from failed_results."
         )
         return SamplingResult(
             sampled_results[best_failed_index],

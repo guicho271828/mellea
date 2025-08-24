@@ -122,7 +122,6 @@ class BaseSamplingStrategy(SamplingStrategy):
             Callable[[Component, Context, list[GenerateLog] | None], ModelOutputThunk]
             | None
         ) = None,
-        requirements: list[Requirement] | None = None,
     ):
         """Initialize a new instance of the class with default parameters.
 
@@ -132,7 +131,6 @@ class BaseSamplingStrategy(SamplingStrategy):
             select_from_failure: Function to select a model output thunk from failed attempts.
             validate: Function to validate the results against requirements. If None, validation is provided later through setter.
             generate: Function to generate new model output thunks. If None, generate is provided later through setter.
-            requirements: List of requirements to test against. If None, test all requirements attached to the given instruction.
 
         Raises:
             AssertionError: If loop_budget is not greater than 0.
@@ -146,7 +144,6 @@ class BaseSamplingStrategy(SamplingStrategy):
         self.select_from_failure = select_from_failure
         self.validate = validate  # it's ok to be None here. If it is None, m.instruct will set a default validator function.
         self.generate = generate  # it's ok to be None here. If it is None, m.instruct will set a default generator function.
-        self.requirements = requirements
 
     def sample(
         self,
@@ -155,7 +152,6 @@ class BaseSamplingStrategy(SamplingStrategy):
         *,
         show_progress: bool = True,
         generate_logs: list[GenerateLog] | None = None,
-        requirements: list[Requirement] | None = None,
         validation_ctx: Context | None = None,
     ) -> SamplingResult:
         """This method performs a sampling operation based on the given instruction.
@@ -165,7 +161,6 @@ class BaseSamplingStrategy(SamplingStrategy):
             context: The context to be passed to the sampling strategy.
             show_progress: if true, a tqdm progress bar is used. Otherwise, messages will still be sent to flog.
             generate_logs: If provided, the generations will be logged.
-            requirements: List of requirements to test against.
             validation_ctx: Optional context to use for validation. If None, validation_ctx = ctx.
 
         Returns:
@@ -192,13 +187,6 @@ class BaseSamplingStrategy(SamplingStrategy):
         sampled_scores: list[list[tuple[Requirement, ValidationResult]]] = []
         sampled_actions: list[Component] = []
 
-        if self.requirements is not None:
-            reqs = self.requirements
-            if requirements is not None:
-                flog.warn("Some requirements are ignored.")
-        else:
-            reqs = requirements if requirements is not None else []
-
         loop_count = 0
         loop_budget_range_iterator = (
             tqdm.tqdm(range(self.loop_budget))  # type: ignore
@@ -216,10 +204,10 @@ class BaseSamplingStrategy(SamplingStrategy):
             result = self.generate(new_action, ctx, generate_logs)
 
             # validation pass
-            val_scores = self.validate(reqs, validation_ctx, result)
+            val_scores = self.validate(action.requirements, validation_ctx, result)
 
             # match up reqs with scores
-            constraint_scores = list(zip(reqs, val_scores))
+            constraint_scores = list(zip(action.requirments, val_scores))
 
             # collect all data
             sampled_results.append(result)

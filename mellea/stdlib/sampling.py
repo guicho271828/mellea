@@ -328,7 +328,6 @@ class AgenticSamplingStrategy(BaseSamplingStrategy):
             Callable[[Component, Context, list[GenerateLog] | None], ModelOutputThunk]
             | None
         ) = None,
-        requirements: list[Requirement] | None = None,
     ):
         if repair is None:
             repair = AgenticSamplingStrategy.agentic_repair_default
@@ -339,7 +338,6 @@ class AgenticSamplingStrategy(BaseSamplingStrategy):
             select_from_failure=select_from_failure,
             validate=validate,
             generate=generate,
-            requirements=requirements,
         )
 
     @staticmethod

@@ -144,8 +144,8 @@ class BaseSamplingStrategy(SamplingStrategy):
         self.loop_budget = loop_budget
         self.repair = repair
         self.select_from_failure = select_from_failure
-        self.validate = validate  # it's ok to be None here
-        self.generate = generate  # it's ok to be None here
+        self.validate = validate  # it's ok to be None here. If it is None, m.instruct will set a default validator function.
+        self.generate = generate  # it's ok to be None here. If it is None, m.instruct will set a default generator function.
         self.requirements = requirements
 
     def sample(
@@ -297,7 +297,8 @@ class RejectionSamplingStrategy(BaseSamplingStrategy):
         ) = None,
         requirements: list[Requirement] | None = None,
     ):
-        def repair_wrapper(_, past_actions, past_results, past_val):
+        def repair_wrapper(ctx, past_actions, past_results, past_val):
+            # ctx is not used
             return repair(past_actions, past_results, past_val)
 
         super().__init__(

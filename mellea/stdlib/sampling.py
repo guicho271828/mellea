@@ -283,7 +283,6 @@ class RejectionSamplingStrategy(BaseSamplingStrategy):
             Callable[[Component, Context, list[GenerateLog] | None], ModelOutputThunk]
             | None
         ) = None,
-        requirements: list[Requirement] | None = None,
     ):
         def repair_wrapper(ctx, past_actions, past_results, past_val):
             # ctx is not used
@@ -295,7 +294,6 @@ class RejectionSamplingStrategy(BaseSamplingStrategy):
             select_from_failure=select_from_failure,
             validate=validate,
             generate=generate,
-            requirements=requirements,
         )
 
 

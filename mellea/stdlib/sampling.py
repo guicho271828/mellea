@@ -366,3 +366,121 @@ class AgenticSamplingStrategy(BaseSamplingStrategy):
         )
 
         return next_action
+
+
+class RepairSamplingStrategy(RejectionSamplingStrategy):
+    """Rejection sampling that autoregressively generates a new sample from the previous failure."""
+
+    def sample(
+        self,
+        action: Component,
+        context: Context,
+        *,
+        show_progress: bool = True,
+        generate_logs: list[GenerateLog] | None = None,
+        validation_ctx: Context | None = None,
+    ) -> SamplingResult:
+        """This method performs a sampling operation based on the given instruction.
+
+        Args:
+            action : The action object to be sampled.
+            context: The context to be passed to the sampling strategy.
+            show_progress: if true, a tqdm progress bar is used. Otherwise, messages will still be sent to flog.
+            generate_logs: If provided, the generations will be logged.
+            validation_ctx: Optional context to use for validation. If None, validation_ctx = ctx.
+
+        Returns:
+            SamplingResult: A result object indicating the success or failure of the sampling process.
+
+        Raises:
+            AssertionError: Asserts that all required components (repair, select_from_failure, validate, and generate) are provided before proceeding with the sampling.
+        """
+        assert self.repair is not None, "Repair must be provided."
+        assert self.select_from_failure is not None, (
+            "Select from failure must be provided."
+        )
+        assert self.validate is not None, "Validation must be provided."
+        assert self.generate is not None, "Generate must be provided."
+
+        assert isinstance(context, LinearContext), f"expecting a linear context for repairing, got: {type(context).__name__}"
+
+        # just to be sure to not cause issues to the OG context
+        ctx = context.copy()
+        validation_ctx = validation_ctx if validation_ctx is not None else context
+        assert validation_ctx is not None, "Validation context must be provided."
+
+        flog = FancyLogger.get_logger()
+
+        sampled_results: list[ModelOutputThunk] = []
+        sampled_scores: list[list[tuple[Requirement, ValidationResult]]] = []
+        sampled_actions: list[Component] = []
+
+        loop_count = 0
+        loop_budget_range_iterator = (
+            tqdm.tqdm(range(self.loop_budget))  # type: ignore
+            if show_progress
+            else range(self.loop_budget)  # type: ignore
+        )
+
+        new_action = deepcopy(action)
+        for _ in loop_budget_range_iterator:  # type: ignore
+            loop_count += 1
+            if not show_progress:
+                flog.info(f"Running loop {loop_count} of {self.loop_budget}")
+
+            # run a generation pass
+            result = self.generate(new_action, ctx, generate_logs)
+
+            ctx.insert_turn(ContextTurn(new_action, result))
+
+            # validation pass
+            val_scores = self.validate(action.requirements, validation_ctx, result)
+
+            # match up reqs with scores
+            constraint_scores = list(zip(action.requirements, val_scores))
+
+            # collect all data
+            sampled_results.append(result)
+            sampled_scores.append(constraint_scores)
+            sampled_actions.append(new_action)
+
+            # if all vals are true -- break and return success
+            if all(bool(s[1]) for s in constraint_scores):
+                flog.info("SUCCESS")
+                return SamplingResult(
+                    result,
+                    success=True,
+                    sample_generations=sampled_results,
+                    sample_validations=sampled_scores,
+                )
+
+            else:
+                # log partial success and continue
+                count_valid = len([s for s in constraint_scores if bool(s[1])])
+                flog.info(f"FAILED. Valid: {count_valid}/{len(constraint_scores)}")
+
+            old_action = new_action
+            new_action = Instruction(
+                "\n* ".join(["Your previous result does not follow these requirements:"] +
+                          [ req.description for req, res in constraint_scores if not res ]))
+
+        flog.info(
+            f"Invoking select_from_failure after {len(sampled_results)} failed attempts."
+        )
+
+        # if no valid result could be determined, find a last resort.
+        best_failed_index = self.select_from_failure(
+            sampled_actions, sampled_results, sampled_scores
+        )
+        assert best_failed_index < len(sampled_results), (
+            "The select_from_failure method did not return a valid result. It has to select from failed_results."
+        )
+        return SamplingResult(
+            sampled_results[best_failed_index],
+            success=False,
+            sample_generations=sampled_results,
+            sample_validations=sampled_scores,
+            sample_actions=sampled_actions,
+        )
+
+

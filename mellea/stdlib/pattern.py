@@ -4,6 +4,22 @@ from dataclasses import dataclass
 from string import Template
 from pydantic import BaseModel, create_model
 
+
+def supercede(cls1: type, cls2: type) -> type:
+    """
+    Return the more specific class if one is a subclass of the other.
+    Raise ValueError if neither is a subclass of the other.
+    """
+    if issubclass(cls1, cls2) and cls1 is not cls2:
+        return cls1
+    elif issubclass(cls2, cls1) and cls1 is not cls2:
+        return cls2
+    elif cls1 is cls2:
+        return cls1
+    else:
+        raise ValueError(f"{cls1.__name__} and {cls2.__name__} are unrelated.")
+
+
 class Pattern:
 
     def __init__(self, pattern:str, **types:type[Any]):
@@ -46,6 +62,23 @@ class Pattern:
             "\nSchema:\n" +
             self.model().dump_json_schema()
         )
+
+
+    def __and__(self, other) -> 'Pattern':
+        # WIP. not a final state.
+        # We should actually keep the original Pattern instance, rather than immediately merging them,
+        # because we must perform query optimization later.
+
+        types = self.types.copy()
+        for v in other.types.keys():
+            if v in types:
+                types[v] = supersede(other.types[v], types[v])
+            else:
+                types[v] = other.types[v]
+
+        return Pattern(
+            self.pattern.template + " " + other.pattern.template,
+            **types)
 
 
 if __name__ == "__main__":

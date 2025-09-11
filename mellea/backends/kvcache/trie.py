@@ -59,6 +59,9 @@ class RadixTrieNode[K,V]:
     def __post__init__(self):
         assert len(self.prefix) == len(self.content)
 
+    def __contains__(self, key:K):
+        return key in self.children
+
     def __getitem__(self, key:K):
         return self.children[key]
 
@@ -156,6 +159,8 @@ class RadixTrie[K,V]:
         index = 0
         while True:
             key = query[index]
+            if key not in node:
+                break
             node = node[key]
             prefix_length = len(node.prefix)
             if query[index:index+prefix_length] != node.prefix:

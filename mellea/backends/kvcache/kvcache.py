@@ -5,7 +5,10 @@ from transformers import (
     DynamicCache,
 )
 
-SplitCache = defaultdict[int, defaultdict[int, dict[int, tuple[torch.Tensor, torch.Tensor]]]]
+from mellea.backends.kvcache.trie import RadixTrie
+
+TokenCache = dict[int, tuple[torch.Tensor, torch.Tensor]]   # layer index -> (key, value) tensors
+SplitCache = defaultdict[int, defaultdict[int, TokenCache]] # batch index, token index -> TokenCache
 
 def split(cache: DynamicCache) -> SplitCache:
     """
@@ -54,6 +57,26 @@ def unsplit(cache: SplitCache) -> DynamicCache:
         result.update(layers[layer_idx][0], layers[layer_idx][1], layer_idx) # type:ignore
 
     return result
+
+
+def to_trie(batch_tokens: torch.Tensor, cache: SplitCache | DynamicCache) -> RadixTrie[int,TokenCache]:
+
+    if isinstance(cache, DynamicCache):
+        cache : SplitCache = split(cache)
+
+    assert batch_tokens.ndim == 2
+
+    trie = RadixTrie[int,TokenCache]()
+    layers = dict()
+    batch_size = len(cache)
+    for batch_idx, batch in cache.items():
+        seq_len = len(batch)
+        # batch is a defaultdict; converting it into a list
+        contents : list[TokenCache] = [ batch[token_idx] for token_idx in range(seq_len) ]
+        keys     : list[int]        = batch_tokens[batch_idx].tolist()
+        trie[keys] = contents
+
+    return trie
 
 
 if __name__ == "__main__":

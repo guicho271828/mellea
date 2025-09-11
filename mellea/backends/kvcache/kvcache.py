@@ -26,3 +26,24 @@ def split(cache: DynamicCache) -> SplitCache:
 
     return results
 
+
+
+
+if __name__ == "__main__":
+
+    import torch
+    torch.set_printoptions(edgeitems=1, threshold=5)
+
+    from transformers import AutoTokenizer, AutoModelForCausalLM, DynamicCache
+
+    tokenizer = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM2-1.7B-Instruct")
+    model = AutoModelForCausalLM.from_pretrained("HuggingFaceTB/SmolLM2-1.7B-Instruct", device_map="auto")
+    inputs = tokenizer(["I like music, especially the country music from",
+                        "I like music, especially the progressive rock from"], return_tensors="pt").to(model.device)
+
+    past_key_values = DynamicCache()
+    out = model.generate(**inputs, do_sample=False, max_new_tokens=20, past_key_values=past_key_values)
+    print(tokenizer.batch_decode(out,skip_special_tokens=True))
+
+    split_cache = split(past_key_values)
+

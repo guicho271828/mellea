@@ -74,3 +74,10 @@ if __name__ == "__main__":
 
     split_cache = split(past_key_values)
 
+    past_key_values2 = unsplit(split_cache)
+
+    for (k1, v1), (k2, v2) in zip(past_key_values, past_key_values2):
+        assert torch.allclose(k1, k2)
+        assert torch.allclose(v1, v2)
+
+

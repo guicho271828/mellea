@@ -27,6 +27,33 @@ def split(cache: DynamicCache) -> SplitCache:
     return results
 
 
+def unsplit(cache: SplitCache) -> DynamicCache:
+    """
+    Merge a nested dict (produced by `split`) back into a DynamicCache.
+    """
+
+    result = DynamicCache()
+
+    layers = dict()
+    batch_size = len(cache)
+    for batch_idx, batch in cache.items():
+        seq_len = len(batch)
+        for token_idx, layers_per_token in batch.items():
+            for layer_idx, (k, v) in layers_per_token.items():
+                k_num_heads, k_head_dim = k.shape
+                v_num_heads, v_head_dim = v.shape
+                if layer_idx not in layers:
+                    layers[layer_idx] = (
+                        torch.zeros(batch_size, k_num_heads, seq_len, k_head_dim, dtype=k.dtype, device=k.device),
+                        torch.zeros(batch_size, v_num_heads, seq_len, v_head_dim, dtype=v.dtype, device=v.device),
+                    )
+                layers[layer_idx][0][batch_idx, :, token_idx, :] = k
+                layers[layer_idx][1][batch_idx, :, token_idx, :] = v
+
+    for layer_idx in range(len(layers)):
+        result.update(layers[layer_idx][0], layers[layer_idx][1], layer_idx) # type:ignore
+
+    return result
 
 
 if __name__ == "__main__":

@@ -59,16 +59,16 @@ class RadixTrieNode[K,V]:
     def __post__init__(self):
         assert len(self.prefix) == len(self.content)
 
-    def __contains__(self, key:K):
+    def __contains__(self, key:K) -> bool:
         return key in self.children
 
-    def __getitem__(self, key:K):
+    def __getitem__(self, key:K) -> RadixTrieNode[K,V]:
         return self.children[key]
 
     def __setitem__(self, key:K, node:RadixTrieNode[K,V]):
         self.children[key] = node
 
-    def __add__(self, other:RadixTrieNode[K,V]):
+    def __add__(self, other:RadixTrieNode[K,V]) -> RadixTrieNode[K,V]:
 
         longest_common_prefix = 0
         for x, y in zip(self.prefix, other.prefix):
@@ -135,7 +135,7 @@ class RadixTrieNode[K,V]:
                     children=other.children),
             })
 
-    def visualize(self, indent=0):
+    def visualize(self, indent=0) -> str:
         s = " "*indent + "prefix: " + str(self.prefix) + "\n"
         for key, value in self.children.items():
             s += " "*indent + "next: " + str(key) + " ->\n"
@@ -151,7 +151,7 @@ class RadixTrie[K,V]:
     """
     root: RadixTrieNode[K,V] | None = None
 
-    def __getitem__(self, query:list[K]):
+    def __getitem__(self, query:list[K]) -> list[V]:
         node = self.root
         results = []
         results.extend(node.content)
@@ -180,10 +180,10 @@ class RadixTrie[K,V]:
             self.root += singleton
         pass
 
-    def __add__(self, other:RadixTrie[K,V]):
+    def __add__(self, other:RadixTrie[K,V]) -> RadixTrie[K,V]:
         return RadixTrie(root=self.root + other.root)
 
-    def visualize(self):
+    def visualize(self) -> str:
         return self.root.visualize()
 
 

@@ -103,4 +103,6 @@ if __name__ == "__main__":
         assert torch.allclose(k1, k2)
         assert torch.allclose(v1, v2)
 
+    trie = to_trie(inputs['input_ids'], split_cache)
+    print(trie)
 

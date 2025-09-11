@@ -84,6 +84,27 @@ def to_trie(input: BatchEncoding, cache: SplitCache | DynamicCache) -> RadixTrie
     return trie
 
 
+def from_trie(input: BatchEncoding, trie: RadixTrie[int,TokenCache]) -> DynamicCache:
+
+    tokens = input["input_ids"]
+    masks  = input["attention_mask"]
+    assert tokens.ndim == 2
+
+    split_cache : SplitCache = defaultdict(lambda: defaultdict(lambda : dict()))
+
+    for batch_idx, (_tokens, _masks) in enumerate(zip(tokens, masks)):
+        query = _tokens[_masks.bool()].tolist()
+        # print(query)
+        while query not in trie:
+            query = query[:-1]
+            # print(query)
+        token_caches : list[TokenCache] = trie[query]
+        for token_idx, token_cache in enumerate(token_caches):
+            split_cache[batch_idx][token_idx] = token_cache
+
+    return unsplit(split_cache)
+
+
 if __name__ == "__main__":
 
     import torch

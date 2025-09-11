@@ -104,5 +104,5 @@ if __name__ == "__main__":
         assert torch.allclose(v1, v2)
 
     trie = to_trie(inputs['input_ids'], split_cache)
-    print(trie)
+    print(trie.visualize())
 

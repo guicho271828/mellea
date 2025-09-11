@@ -132,6 +132,14 @@ class RadixTrieNode[K,V]:
                     children=other.children),
             })
 
+    def visualize(self, indent=0):
+        s = " "*indent + "prefix: " + str(self.prefix) + "\n"
+        for key, value in self.children.items():
+            s += " "*indent + "next: " + str(key) + " ->\n"
+            s += value.visualize(indent+2)
+        return s
+
+
 @dataclass
 class RadixTrie[K,V]:
     """A RadixTrie.
@@ -169,6 +177,9 @@ class RadixTrie[K,V]:
 
     def __add__(self, other:RadixTrie[K,V]):
         return RadixTrie(root=self.root + other.root)
+
+    def visualize(self):
+        return self.root.visualize()
 
 
 if __name__ == "__main__":

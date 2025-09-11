@@ -343,7 +343,10 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
                 tools=convert_tools_to_json(tools),  # type: ignore
                 return_tensors="pt",
                 **self._make_backend_specific_and_remove(model_options),
-            ).to(self._device)  # type: ignore
+            )
+
+
+            input_ids = input_ids.to(self._device)  # type: ignore
 
             if format is None:
                 chat_output = self._model.generate(  # type: ignore

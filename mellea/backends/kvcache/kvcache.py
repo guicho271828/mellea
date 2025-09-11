@@ -3,6 +3,7 @@ import torch
 
 from transformers import (
     DynamicCache,
+    BatchEncoding,
 )
 
 from mellea.backends.kvcache.trie import RadixTrie
@@ -39,9 +40,11 @@ def unsplit(cache: SplitCache) -> DynamicCache:
 
     layers = dict()
     batch_size = len(cache)
+    seq_len = min([len(batch) for batch in cache.values()]) # use min here; otherwise it 0-fills a kv cache
     for batch_idx, batch in cache.items():
-        seq_len = len(batch)
         for token_idx, layers_per_token in batch.items():
+            if token_idx >= seq_len:
+                continue
             for layer_idx, (k, v) in layers_per_token.items():
                 k_num_heads, k_head_dim = k.shape
                 v_num_heads, v_head_dim = v.shape
@@ -59,12 +62,14 @@ def unsplit(cache: SplitCache) -> DynamicCache:
     return result
 
 
-def to_trie(batch_tokens: torch.Tensor, cache: SplitCache | DynamicCache) -> RadixTrie[int,TokenCache]:
+def to_trie(input: BatchEncoding, cache: SplitCache | DynamicCache) -> RadixTrie[int,TokenCache]:
 
     if isinstance(cache, DynamicCache):
         cache : SplitCache = split(cache)
 
-    assert batch_tokens.ndim == 2
+    tokens = input["input_ids"]
+    masks  = input["attention_mask"]
+    assert tokens.ndim == 2
 
     trie = RadixTrie[int,TokenCache]()
     layers = dict()
@@ -73,7 +78,7 @@ def to_trie(batch_tokens: torch.Tensor, cache: SplitCache | DynamicCache) -> Rad
         seq_len = len(batch)
         # batch is a defaultdict; converting it into a list
         contents : list[TokenCache] = [ batch[token_idx] for token_idx in range(seq_len) ]
-        keys     : list[int]        = batch_tokens[batch_idx].tolist()
+        keys     : list[int]        = tokens[batch_idx][masks[batch_idx].bool()].tolist() # remove masked elements
         trie[keys] = contents
 
     return trie
@@ -89,7 +94,12 @@ if __name__ == "__main__":
     tokenizer = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM2-1.7B-Instruct")
     model = AutoModelForCausalLM.from_pretrained("HuggingFaceTB/SmolLM2-1.7B-Instruct", device_map="auto")
     inputs = tokenizer(["I like music, especially the country music from",
-                        "I like music, especially the progressive rock from"], return_tensors="pt").to(model.device)
+                        "I like music, especially the 70's progressive rock such as"],
+                       padding=True,
+                       padding_side='left',
+                       return_tensors="pt").to(model.device)
+    print(inputs["input_ids"])
+    print(inputs["attention_mask"])
 
     past_key_values = DynamicCache()
     out = model.generate(**inputs, do_sample=False, max_new_tokens=20, past_key_values=past_key_values)
@@ -103,6 +113,6 @@ if __name__ == "__main__":
         assert torch.allclose(k1, k2)
         assert torch.allclose(v1, v2)
 
-    trie = to_trie(inputs['input_ids'], split_cache)
+    trie = to_trie(inputs, split_cache)
     print(trie.visualize())
 

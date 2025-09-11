@@ -1,11 +1,6 @@
 from collections import defaultdict
 import torch
-
-from transformers import (
-    DynamicCache,
-    BatchEncoding,
-)
-
+from transformers import DynamicCache, BatchEncoding
 from mellea.backends.kvcache.trie import RadixTrie
 
 TokenCache = dict[int, tuple[torch.Tensor, torch.Tensor]]   # layer index -> (key, value) tensors
@@ -134,7 +129,7 @@ if __name__ == "__main__":
         assert torch.allclose(k1, k2)
         assert torch.allclose(v1, v2)
 
-    trie = to_trie(inputs, split_cache)
+    trie = to_trie(inputs, past_key_values)
     print(trie.visualize())
 
     inputs = tokenizer(["I like music, but today I want to go to bed",

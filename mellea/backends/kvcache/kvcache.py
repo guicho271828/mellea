@@ -137,3 +137,16 @@ if __name__ == "__main__":
     trie = to_trie(inputs, split_cache)
     print(trie.visualize())
 
+    inputs = tokenizer(["I like music, but today I want to go to bed",
+                        "I like mediterraean food, especially"],
+                       padding=True,
+                       padding_side='left',
+                       return_tensors="pt").to(model.device)
+    print(inputs["input_ids"])
+    print(inputs["attention_mask"])
+
+    past_key_values = from_trie(inputs, trie)
+    out = model.generate(**inputs, do_sample=False, max_new_tokens=20, past_key_values=past_key_values)
+    for s in tokenizer.batch_decode(out,skip_special_tokens=True):
+        print(s)
+

@@ -237,6 +237,14 @@ if __name__ == "__main__":
     t["abcghi"] = list(range(6))
     print(t)
 
+    print("testing partial retrieval")
+    print(t["a"])
+    print(t["ab"])
+    print(t["abc"])
+    print(t["abcd"])
+    print(t["abcde"])
+    print(t["abcdef"])
+    
     print("testing iterator")
     for keys, values in t:
         print(keys, values)

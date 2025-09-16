@@ -135,6 +135,15 @@ class RadixTrieNode[K,V]:
                     children=other.children),
             })
 
+    def __iter__(self):
+        if len(self.children) == 0:  # leaf node
+            yield self.prefix, self.content
+        else:
+            for node in self.children.values():
+                for prefix, content in node:
+                    yield (self.prefix + prefix), (self.content + content)
+
+
     def visualize(self, indent=0) -> str:
         s = " "*indent + "prefix: " + str(self.prefix) + "\n"
         for key, value in self.children.items():
@@ -186,6 +195,9 @@ class RadixTrie[K,V]:
     def visualize(self) -> str:
         return self.root.visualize()
 
+    def __iter__(self):
+        yield from iter(self.root)
+
 
 if __name__ == "__main__":
 
@@ -212,7 +224,11 @@ if __name__ == "__main__":
     print(n2)
     print(n3)
 
+    print("testing iterator")
+    for keys, values in n2+n3:
+        print(keys, values)
 
+    print("making radixtrie")
     t = RadixTrie[str,int]()
     t["abc"] = list(range(3))
     print(t)
@@ -221,3 +237,6 @@ if __name__ == "__main__":
     t["abcghi"] = list(range(6))
     print(t)
 
+    print("testing iterator")
+    for keys, values in t:
+        print(keys, values)

@@ -162,27 +162,36 @@ class RadixTrie[K,V]:
 
     def __getitem__(self, query:list[K]) -> list[V]:
         node = self.root
-        results = []
-        results.extend(node.content)
+        stack = []
 
-        index = 0
-        while True:
-            key = query[index]
-            if key not in node:
-                break
-            node = node[key]
-            prefix_length = len(node.prefix)
-            if query[index:index+prefix_length] != node.prefix:
-                raise IndexError()
-            index += prefix_length
-            results.extend(node.content)
+        k_index = 0             # key index
+        p_index = 0             # prefix index
+        for k_index, key in enumerate(query):
+            if p_index > len(node.prefix):
+                raise RuntimeError("huh?")
+            elif p_index == len(node.prefix):
+                if key in node.children:
+                    node = node.children[key]
+                else:
+                    raise KeyError()
+                    # return RadixTrieNode(prefix=query,
+                    #                      content=stack)
+                p_index = 0
+            else:
+                pass
 
-        return results
+            if node.prefix[p_index] == key:
+                stack.append(node.content[p_index])
+                p_index += 1
+            else:
+                raise KeyError()
+
+        return stack
 
     def __setitem__(self, query:list[K], contents:list[V]):
 
         singleton = RadixTrieNode[K,V](prefix = query,
-                                        content = contents)
+                                       content = contents)
         if self.root is None:
             self.root = singleton
         else:
@@ -244,7 +253,7 @@ if __name__ == "__main__":
     print(t["abcd"])
     print(t["abcde"])
     print(t["abcdef"])
-    
+
     print("testing iterator")
     for keys, values in t:
         print(keys, values)

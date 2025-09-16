@@ -160,6 +160,30 @@ class RadixTrie[K,V]:
     """
     root: RadixTrieNode[K,V] | None = None
 
+    def __contains__(self, query:list[K]) -> bool:
+        node = self.root
+
+        k_index = 0             # key index
+        p_index = 0             # prefix index
+        for k_index, key in enumerate(query):
+            if p_index > len(node.prefix):
+                raise RuntimeError("huh?")
+            elif p_index == len(node.prefix):
+                if key in node.children:
+                    node = node.children[key]
+                else:
+                    return False
+                p_index = 0
+            else:
+                pass
+
+            if node.prefix[p_index] == key:
+                p_index += 1
+            else:
+                return False
+
+        return True
+
     def __getitem__(self, query:list[K]) -> list[V]:
         node = self.root
         stack = []

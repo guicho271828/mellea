@@ -135,14 +135,56 @@ class RadixTrieNode[K,V]:
                     children=other.children),
             })
 
-    def __iter__(self):
+    def items(self):
+        """
+        Walk over the keys and the values stored in the radix tree
+        """
         if len(self.children) == 0:  # leaf node
             yield self.prefix, self.content
         else:
-            for node in self.children.values():
-                for prefix, content in node:
+            for _, node in sorted(self.children.items()):
+                for prefix, content in node.items():
                     yield (self.prefix + prefix), (self.content + content)
 
+    def keys(self):
+        """
+        Walk over the keys stored in the radix tree
+        """
+        if len(self.children) == 0:  # leaf node
+            yield self.prefix
+        else:
+            for _, node in sorted(self.children.items()):
+                for prefix in node.keys():
+                    yield self.prefix + prefix
+
+    def values(self):
+        """
+        Walk over the values stored in the radix tree
+        """
+        if len(self.children) == 0:  # leaf node
+            yield self.content
+        else:
+            for _, node in sorted(self.children.items()):
+                for content in node.values():
+                    yield self.content + content
+
+    def nodes(self):
+        """
+        Walk over the nodes in the radix tree
+        """
+        yield self
+        for _, node in sorted(self.children.items()):
+            yield from node.nodes()
+
+    def branching_prefixes(self):
+        """
+        Walk over every prefix that is followed by a branching point, and the list of choices
+        """
+        if self.children:
+            yield self.prefix, sorted(self.children.keys())
+        for _, node in sorted(self.children.items()):
+            for prefix, choices in node.branching_prefixes():
+                yield self.prefix + prefix, choices
 
     def visualize(self, indent=0) -> str:
         s = " "*indent + "prefix: " + str(self.prefix) + "\n"
@@ -228,8 +270,27 @@ class RadixTrie[K,V]:
     def visualize(self) -> str:
         return self.root.visualize()
 
-    def __iter__(self):
-        yield from iter(self.root)
+    def items(self):
+        yield from self.root.items()
+
+    def keys(self):
+        yield from self.root.keys()
+
+    def values(self):
+        yield from self.root.values()
+
+    def nodes(self):
+        yield from self.root.nodes()
+
+    def branching_prefixes(self):
+        yield from self.root.branching_prefixes()
+
+    @staticmethod
+    def from_map(data:list[tuple[list[K],list[V]]]):
+        t = RadixTrie[K,V]()
+        for ks, vs in data:
+            t[ks] = vs
+        return t
 
 
 if __name__ == "__main__":
@@ -258,7 +319,7 @@ if __name__ == "__main__":
     print(n3)
 
     print("testing iterator")
-    for keys, values in n2+n3:
+    for keys, values in (n2+n3).items():
         print(keys, values)
 
     print("making radixtrie")
@@ -278,6 +339,23 @@ if __name__ == "__main__":
     print(t["abcde"])
     print(t["abcdef"])
 
-    print("testing iterator")
-    for keys, values in t:
+    print("testing key-value iterator")
+    for keys, values in t.items():
         print(keys, values)
+
+    print("testing key iterator")
+    for keys in t.keys():
+        print(keys)
+
+    print("testing value iterator")
+    for values in t.values():
+        print(values)
+
+    print("testing node iterator")
+    for n in t.nodes():
+        print(n)
+
+    print("testing branching point iterator")
+    for prefix, choices in t.branching_prefixes():
+        print(prefix, choices)
+

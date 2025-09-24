@@ -188,16 +188,20 @@ class LocalSGLangBackend(FormatterBackend):
             if format is not None:
                 sampling_params["json_schema"] = json.dumps(format.model_json_schema())
 
-            if model_options.get(ModelOption.STREAM, False):
-                generator = async_stream_and_merge(
-                    self._model,  # type: ignore
-                    input_str,
-                    sampling_params=sampling_params,
-                )  # type: ignore
-            else:
-                generator = self._model.async_generate(  # type: ignore
-                    input_str, sampling_params=sampling_params
-                )  # type: ignore
+            # if model_options.get(ModelOption.STREAM, False):
+            #     generator = async_stream_and_merge(
+            #         self._model,  # type: ignore
+            #         input_str,
+            #         sampling_params=sampling_params,
+            #     )  # type: ignore
+            # else:
+            #     generator = self._model.async_generate(  # type: ignore
+            #         input_str, sampling_params=sampling_params
+            #     )  # type: ignore
+
+            generator = self._model.async_generate(  # type: ignore
+                input_str, sampling_params=sampling_params
+            )  # type: ignore
 
             output = ModelOutputThunk(None)
             output._context = ctx.render_for_generation()

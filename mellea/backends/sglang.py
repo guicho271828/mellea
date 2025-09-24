@@ -15,6 +15,7 @@ import shutil
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Optional
 
+import nest_asyncio
 import sglang as sgl  # type:ignore
 import torch
 from transformers import AutoTokenizer, PreTrainedTokenizerBase
@@ -40,6 +41,8 @@ from mellea.stdlib.base import (
 )
 from mellea.stdlib.chat import Message
 from mellea.stdlib.requirement import LLMaJRequirement, Requirement
+
+nest_asyncio.apply()
 
 
 class LocalSGLangBackend(FormatterBackend):

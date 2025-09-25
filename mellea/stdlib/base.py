@@ -149,14 +149,6 @@ def get_images_from_component(c: Component) -> None | list[ImageBlock]:
         return None
 
 
-class GenerateType(enum.Enum):
-    """Used to track what functions can be used to extract a value from a ModelOutputThunk."""
-
-    NONE = None
-    ASYNC = 1
-    SYNC = 2
-
-
 class ModelOutputThunk(CBlock):
     """A `ModelOutputThunk` is a special type of `CBlock` that we know came from a model's output. It is possible to instantiate one without the output being computed yet."""
 
@@ -191,7 +183,6 @@ class ModelOutputThunk(CBlock):
         # what gets set for _generate_type. _generate_type determines what
         # function(s) can be used to get the value of the ModelOutputThunk.
         self._generate: asyncio.Task[None] | None = None
-        self._generate_type: GenerateType = GenerateType.NONE
         self._generate_extra: asyncio.Task[Any] | None = (
             None  # Currently only used by hf.
         )
@@ -227,11 +218,6 @@ class ModelOutputThunk(CBlock):
             assert self.value  # If computed, the value cannot be None.
             return self.value
 
-        if not self._generate_type == GenerateType.ASYNC:
-            raise RuntimeError(
-                f"Cannot use `ModelOutputThunk.avalue()` when the generate function is using `{self._generate_type.name}`"
-            )
-
         while not self._computed:
             await self.astream()
 
@@ -255,11 +241,6 @@ class ModelOutputThunk(CBlock):
         if self._computed:
             assert self.value is not None  # If computed, the value cannot be None.
             return self.value
-
-        if not self._generate_type == GenerateType.ASYNC:
-            raise RuntimeError(
-                f"Cannot use `ModelOutputThunk.astream()` when the generate function is using `{self._generate_type.name}`"
-            )
 
         # Type of the chunk depends on the backend.
         chunks: list[Any | None] = []

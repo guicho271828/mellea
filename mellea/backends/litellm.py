@@ -33,7 +33,6 @@ from mellea.stdlib.base import (
     Component,
     Context,
     GenerateLog,
-    GenerateType,
     ModelOutputThunk,
     ModelToolCall,
 )
@@ -303,7 +302,6 @@ class LiteLLMBackend(FormatterBackend):
             output._generate = asyncio.create_task(
                 send_to_queue(chat_response, output._async_queue)
             )
-            output._generate_type = GenerateType.ASYNC
         except RuntimeError as e:
             # Most likely cause is running this function without an event loop present
             raise e

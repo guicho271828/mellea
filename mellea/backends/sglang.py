@@ -39,7 +39,6 @@ from mellea.stdlib.base import (
     Component,
     Context,
     GenerateLog,
-    GenerateType,
     ModelOutputThunk,
     TemplateRepresentation,
 )
@@ -223,7 +222,6 @@ class LocalSGLangBackend(FormatterBackend):
                 output._generate = asyncio.create_task(
                     send_to_queue(generator, output._async_queue)  # type: ignore
                 )
-                output._generate_type = GenerateType.ASYNC
             except RuntimeError as e:
                 # Most likely cause is running this function without an event loop present.
                 raise e

@@ -11,7 +11,7 @@ from mellea.backends.huggingface import HFAlora, HFAloraCacheInfo, LocalHFBacken
 from mellea.backends.types import ModelOption
 from mellea.helpers.async_helpers import send_to_queue
 from mellea.helpers.fancy_logger import FancyLogger
-from mellea.stdlib.base import GenerateType, ModelOutputThunk
+from mellea.stdlib.base import ModelOutputThunk
 
 
 class HFConstraintAlora(HFAlora):
@@ -131,7 +131,6 @@ class HFConstraintAlora(HFAlora):
             output._generate = asyncio.create_task(
                 send_to_queue(chat_response, output._async_queue)  # type: ignore
             )
-            output._generate_type = GenerateType.ASYNC
         except RuntimeError as e:
             # Most likely cause is running this function without an event loop present.
             raise e

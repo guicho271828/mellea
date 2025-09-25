@@ -219,7 +219,7 @@ class HFConstraintAlora(HFAlora):
         return input_combined
 
 
-async def processing(
+def processing(
     mot: ModelOutputThunk,
     chunk: GenerateDecoderOnlyOutput,
     backend: LocalHFBackend,
@@ -247,7 +247,7 @@ async def processing(
         ]  # Grab the first char of the str.
 
 
-async def post_processing(mot: ModelOutputThunk, backend: LocalHFBackend):
+def post_processing(mot: ModelOutputThunk, backend: LocalHFBackend):
     backend.formatter.parse(mot._action, mot)  # type: ignore
 
 

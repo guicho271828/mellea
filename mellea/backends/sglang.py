@@ -233,7 +233,7 @@ class LocalSGLangBackend(FormatterBackend):
         else:
             raise Exception("Does not yet support non-chat contexts.")
 
-    async def processing(self, mot: ModelOutputThunk, chunk: str | dict[str, Any]):
+    def processing(self, mot: ModelOutputThunk, chunk: str | dict[str, Any]):
         """Process the returned chunks or the complete response."""
 
         if isinstance(chunk, str):  # via async_stream_and_merge
@@ -243,7 +243,7 @@ class LocalSGLangBackend(FormatterBackend):
         else:
             mot._underlying_value = chunk["text"]
 
-    async def post_processing(
+    def post_processing(
         self,
         mot: ModelOutputThunk,
         conversation: list[dict],

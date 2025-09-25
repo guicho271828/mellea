@@ -343,13 +343,13 @@ class LocalVLLMBackend(FormatterBackend):
         else:
             raise Exception("Does not yet support non-chat contexts.")
 
-    async def processing(self, mot: ModelOutputThunk, chunk: vllm.RequestOutput):
+    def processing(self, mot: ModelOutputThunk, chunk: vllm.RequestOutput):
         """Process the returned chunks or the complete response."""
         if mot._underlying_value is None:
             mot._underlying_value = ""
         mot._underlying_value += chunk.outputs[0].text
 
-    async def post_processing(
+    def post_processing(
         self,
         mot: ModelOutputThunk,
         conversation: list[dict],

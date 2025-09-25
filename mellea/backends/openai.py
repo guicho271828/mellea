@@ -520,7 +520,7 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
 
         return output
 
-    async def processing(
+    def processing(
         self, mot: ModelOutputThunk, chunk: ChatCompletion | ChatCompletionChunk
     ):
         """Called during generation to add information from a single ChatCompletion or ChatCompletionChunk to the ModelOutputThunk.
@@ -562,7 +562,7 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
                 chunk.choices[0].model_dump()
             )
 
-    async def post_processing(
+    def post_processing(
         self,
         mot: ModelOutputThunk,
         tools: dict[str, Callable],

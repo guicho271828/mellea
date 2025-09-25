@@ -310,7 +310,7 @@ class LiteLLMBackend(FormatterBackend):
 
         return output
 
-    async def processing(
+    def processing(
         self,
         mot: ModelOutputThunk,
         chunk: litellm.ModelResponse | litellm.ModelResponseStream,  # type: ignore
@@ -362,7 +362,7 @@ class LiteLLMBackend(FormatterBackend):
                 chunk.choices[0].model_dump()
             )
 
-    async def post_processing(
+    def post_processing(
         self,
         mot: ModelOutputThunk,
         conversation: list[dict],

@@ -463,7 +463,7 @@ class OllamaModelBackend(FormatterBackend):
             return model_tool_calls
         return None
 
-    async def processing(
+    def processing(
         self,
         mot: ModelOutputThunk,
         chunk: ollama.ChatResponse,
@@ -495,7 +495,7 @@ class OllamaModelBackend(FormatterBackend):
         # Ollama responses are mostly self-contained. Merge chunks immediately.
         chat_response_delta_merge(mot, chunk)
 
-    async def post_processing(
+    def post_processing(
         self,
         mot: ModelOutputThunk,
         conversation: list[dict],

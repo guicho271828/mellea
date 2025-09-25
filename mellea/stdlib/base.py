@@ -195,8 +195,8 @@ class ModelOutputThunk(CBlock):
         self._generate_extra: asyncio.Task[Any] | None = (
             None  # Currently only used by hf.
         )
-        self._process: Callable[[ModelOutputThunk, Any], Coroutine] | None = None
-        self._post_process: Callable[[ModelOutputThunk], Coroutine] | None = None
+        self._process: Callable[[ModelOutputThunk, Any], None] | None = None
+        self._post_process: Callable[[ModelOutputThunk], None] | None = None
 
         self._generate_log: GenerateLog | None = None
 
@@ -309,12 +309,12 @@ class ModelOutputThunk(CBlock):
         # Step 4: process collected chunks
         for chunk in chunks:
             assert self._process is not None
-            await self._process(self, chunk)
+            self._process(self, chunk)
 
         # Step 5: run postprocess
         if self._computed:
             assert self._post_process is not None
-            await self._post_process(self)
+            self._post_process(self)
 
         return self._underlying_value  # type: ignore
 

@@ -351,7 +351,7 @@ class WatsonxAIBackend(FormatterBackend):
 
         return output
 
-    async def processing(self, mot: ModelOutputThunk, chunk: dict):
+    def processing(self, mot: ModelOutputThunk, chunk: dict):
         """Called during generation to add information from a single ChatCompletion or ChatCompletionChunk to the ModelOutputThunk.
 
         For OpenAI-like APIs, tool call parsing is handled in the post processing step."""
@@ -393,7 +393,7 @@ class WatsonxAIBackend(FormatterBackend):
                 mot._meta["oai_chat_response_streamed"] = []
             mot._meta["oai_chat_response_streamed"].append(chunk["choices"][0])
 
-    async def post_processing(
+    def post_processing(
         self,
         mot: ModelOutputThunk,
         conversation: list[dict],

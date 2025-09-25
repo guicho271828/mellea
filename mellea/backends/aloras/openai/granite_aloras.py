@@ -104,13 +104,13 @@ class OpenAIConstraintAlora(OpenAIAlora):
         return output
 
 
-async def processing(mot: ModelOutputThunk, chunk: Completion):
+def processing(mot: ModelOutputThunk, chunk: Completion):
     if mot._underlying_value is None:
         mot._underlying_value = ""
     mot._underlying_value += chunk.choices[0].text
 
 
-async def post_processing(backend: OpenAIBackend, mot: ModelOutputThunk):
+def post_processing(backend: OpenAIBackend, mot: ModelOutputThunk):
     backend.formatter.parse(mot._action, mot)  # type: ignore
 
 

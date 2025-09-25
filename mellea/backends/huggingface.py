@@ -404,7 +404,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
         else:
             raise Exception("Does not yet support non-chat contexts.")
 
-    async def processing(
+    def processing(
         self, mot: ModelOutputThunk, chunk: str | GenerateDecoderOnlyOutput, input_ids
     ):
         """Process the returned chunks or the complete response."""
@@ -422,7 +422,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
                 chunk.sequences[0, input_ids.shape[1] :], skip_special_tokens=True
             )
 
-    async def post_processing(
+    def post_processing(
         self,
         mot: ModelOutputThunk,
         conversation: list[dict],
@@ -432,28 +432,28 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
         input_ids,
     ):
         """Called when generation is done."""
-        if mot._meta.get("hf_output", None) is None:
-            if mot._generate_extra is not None:
-                full_output = await mot._generate_extra
-                assert isinstance(full_output, GenerateDecoderOnlyOutput)
-                mot._meta["hf_output"] = full_output
-
-        # The ModelOutputThunk must be computed by this point.
-        assert mot.value is not None
-
-        # Add an entry to the cache for ALora reuse.
-        if self._use_caches:
-            output_complete = mot._meta["hf_output"].sequences[0]
-            cache: DynamicCache = mot._meta["hf_output"].past_key_values  # type: ignore
-
-            cache_info = HFAloraCacheInfo(
-                kv_cache=cache,
-                merged_token_ids=output_complete,
-                merged_attention=torch.ones_like(output_complete).to(self._device),
-                q_end=len(input_ids[0]),  # type: ignore
-            )
-
-            self.cache_put(mot.value, cache_info)
+        # if mot._meta.get("hf_output", None) is None:
+        #     if mot._generate_extra is not None:
+        #         full_output = await mot._generate_extra
+        #         assert isinstance(full_output, GenerateDecoderOnlyOutput)
+        #         mot._meta["hf_output"] = full_output
+        #
+        # # The ModelOutputThunk must be computed by this point.
+        # assert mot.value is not None
+        #
+        # # Add an entry to the cache for ALora reuse.
+        # if self._use_caches:
+        #     output_complete = mot._meta["hf_output"].sequences[0]
+        #     cache: DynamicCache = mot._meta["hf_output"].past_key_values  # type: ignore
+        #
+        #     cache_info = HFAloraCacheInfo(
+        #         kv_cache=cache,
+        #         merged_token_ids=output_complete,
+        #         merged_attention=torch.ones_like(output_complete).to(self._device),
+        #         q_end=len(input_ids[0]),  # type: ignore
+        #     )
+        #
+        #     self.cache_put(mot.value, cache_info)
 
         # Only scan for tools if we are not doing structured output and tool calls were provided to the model.
         if format is None and tool_calls:

@@ -9,7 +9,6 @@ from transformers.generation.utils import GenerateDecoderOnlyOutput
 
 from mellea.backends.huggingface import HFAlora, HFAloraCacheInfo, LocalHFBackend
 from mellea.backends.types import ModelOption
-from mellea.helpers.async_helpers import send_to_queue
 from mellea.helpers.fancy_logger import FancyLogger
 from mellea.stdlib.base import ModelOutputThunk
 
@@ -100,7 +99,8 @@ class HFConstraintAlora(HFAlora):
                 - 2
             ]
 
-        chat_response = asyncio.to_thread(
+        output = ModelOutputThunk(None)
+        output._generate = asyncio.to_thread(
             self._backend.alora_model.generate,
             input_combined["input_ids"].to(self._backend._device),
             attention_mask=input_combined["attention_mask"].to(self._backend._device),
@@ -111,7 +111,6 @@ class HFConstraintAlora(HFAlora):
             **generate_kwargs,
         )
 
-        output = ModelOutputThunk(None)
         output._meta["alora_name"] = self.name
 
         output._process = functools.partial(
@@ -121,19 +120,6 @@ class HFConstraintAlora(HFAlora):
             gen_prompt=self._generation_prompt,
         )
         output._post_process = functools.partial(post_processing, backend=self._backend)
-
-        try:
-            # To support lazy computation, will need to remove this create_task and store just the unexecuted coroutine.
-            # We can also support synchronous calls by adding a flag and changing this ._generate function.
-
-            # This function should always be called from a running event loop so we don't have to worry about
-            # scheduling the task to a specific event loop here.
-            output._generate = asyncio.create_task(
-                send_to_queue(chat_response, output._async_queue)  # type: ignore
-            )
-        except RuntimeError as e:
-            # Most likely cause is running this function without an event loop present.
-            raise e
 
         return output
 

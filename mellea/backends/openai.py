@@ -29,7 +29,6 @@ from mellea.backends.tools import (
     convert_tools_to_json,
 )
 from mellea.backends.types import ModelOption
-from mellea.helpers.async_helpers import send_to_queue
 from mellea.helpers.fancy_logger import FancyLogger
 from mellea.helpers.openai_compatible_helpers import (
     chat_completion_delta_merge,
@@ -473,9 +472,8 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
         formatted_tools = convert_tools_to_json(tools)
         use_tools = len(formatted_tools) > 0
 
-        chat_response: Coroutine[
-            Any, Any, ChatCompletion | openai.AsyncStream[ChatCompletionChunk]
-        ] = self._async_client.chat.completions.create(
+        output = ModelOutputThunk(None)
+        output._generate = self._async_client.chat.completions.create(
             model=self._hf_model_id,
             messages=conversation,  # type: ignore
             reasoning_effort=thinking,  # type: ignore
@@ -487,7 +485,6 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
             ),
         )  # type: ignore
 
-        output = ModelOutputThunk(None)
         output._context = linearized_context
         output._action = action
         output._model_options = model_opts
@@ -502,19 +499,6 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
             thinking=thinking,
             seed=model_opts.get(ModelOption.SEED, None),
         )
-
-        try:
-            # To support lazy computation, will need to remove this create_task and store just the unexecuted coroutine.
-            # We can also support synchronous calls by adding a flag and changing this ._generate function.
-
-            # This function should always be called from a running event loop so we don't have to worry about
-            # scheduling the task to a specific event loop here.
-            output._generate = asyncio.create_task(
-                send_to_queue(chat_response, output._async_queue)
-            )
-        except RuntimeError as e:
-            # Most likely cause is running this function without an event loop present
-            raise e
 
         return output
 

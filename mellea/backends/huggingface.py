@@ -42,7 +42,6 @@ from mellea.backends.tools import (
 )
 from mellea.backends.types import ModelOption
 from mellea.backends.utils import extract_model_tool_requests, to_chat, use_alora
-from mellea.helpers.async_helpers import send_to_queue
 from mellea.helpers.fancy_logger import FancyLogger
 from mellea.stdlib.base import (
     CBlock,
@@ -326,24 +325,8 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
                     ]
                 )
 
-            streaming_kwargs = {}
-            streamer = None
-            stream = model_options.get(ModelOption.STREAM, False)
-            if stream:
-                try:
-                    # HuggingFace uses a streaming interface that you pass to the generate call.
-                    # Must be called from a running event loop. This should always be the case given the same
-                    # requirement of the ._generate function below.
-                    streamer = AsyncTextIteratorStreamer(
-                        self._tokenizer,  # type: ignore
-                        skip_prompt=True,
-                        skip_special_tokens=True,
-                    )
-                    streaming_kwargs["streamer"] = streamer
-                except RuntimeError as e:
-                    # Most likely cause is creating this object without an event loop present.
-                    raise e
 
+            async def generate():
             # Create a separate thread to handle the processing. Make it awaitable
             # for non-streaming cases and to get the final output.
             # Details: https://huggingface.co/docs/transformers/en/internal/generation_utils#transformers.AsyncTextIteratorStreamer
@@ -373,29 +356,6 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
                 tools=tools,
                 seed=seed,
             )
-
-            try:
-                # To support lazy computation, will need to remove this create_task and store just the unexecuted coroutine.
-                # We can also support synchronous calls by adding a flag and changing this ._generate function.
-
-                response: AsyncTextIteratorStreamer | Coroutine = chat_response
-                if stream and streamer is not None:
-                    # For streaming, we want to pass the AsyncIterator to the function. Unlike other backends,
-                    # this isn't returned by the chat_response coroutine. So we handle it here.
-                    response = streamer
-
-                    # Since the async iterator isn't returned by the chat_response coroutine, we have to create a separate
-                    # task for it here so that it runs in the background. Attach it to the ModelOutputThunk.
-                    output._generate_extra = asyncio.create_task(chat_response)
-
-                # This function should always be called from a running event loop so we don't have to worry about
-                # scheduling the task to a specific event loop here.
-                output._generate = asyncio.create_task(
-                    send_to_queue(response, output._async_queue)  # type: ignore
-                )
-            except RuntimeError as e:
-                # Most likely cause is running this function without an event loop present.
-                raise e
 
             return output
 

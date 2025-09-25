@@ -18,7 +18,6 @@ from mellea.backends.tools import (
     add_tools_from_model_options,
 )
 from mellea.backends.types import ModelOption
-from mellea.helpers.async_helpers import send_to_queue
 from mellea.helpers.fancy_logger import FancyLogger
 from mellea.stdlib.base import (
     CBlock,
@@ -315,10 +314,9 @@ class OllamaModelBackend(FormatterBackend):
                 add_tools_from_context_actions(tools, [action])
             FancyLogger.get_logger().info(f"Tools for call: {tools.keys()}")
 
+        output = ModelOutputThunk(None)
         # Generate a chat response from ollama, using the chat messages. Can be either type since stream is passed as a model option.
-        chat_response: Coroutine[
-            Any, Any, AsyncIterator[ollama.ChatResponse] | ollama.ChatResponse
-        ] = self._async_client.chat(
+        output._generate = self._async_client.chat(
             model=self._get_ollama_model_id(),
             messages=conversation,
             tools=list(tools.values()),
@@ -328,7 +326,6 @@ class OllamaModelBackend(FormatterBackend):
             format=format.model_json_schema() if format is not None else None,
         )  # type: ignore
 
-        output = ModelOutputThunk(None)
         output._context = linearized_context
         output._action = action
         output._model_options = model_opts
@@ -339,19 +336,6 @@ class OllamaModelBackend(FormatterBackend):
         output._post_process = functools.partial(
             self.post_processing, conversation=conversation, tools=tools
         )
-
-        try:
-            # To support lazy computation, will need to remove this create_task and store just the unexecuted coroutine.
-            # We can also support synchronous calls by adding a flag and changing this ._generate function.
-
-            # This function should always be called from a running event loop so we don't have to worry about
-            # scheduling the task to a specific event loop here.
-            output._generate = asyncio.create_task(
-                send_to_queue(chat_response, output._async_queue)
-            )
-        except RuntimeError as e:
-            # Most likely cause is running this function without an event loop present
-            raise e
 
         return output
 

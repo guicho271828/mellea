@@ -175,14 +175,7 @@ class ModelOutputThunk(CBlock):
         self._action: Component | CBlock | None = None
         self._model_options: dict[str, Any] | None = None
 
-        # Used for async and async streaming.
-        self._async_queue: asyncio.Queue = asyncio.Queue(maxsize=20)
-        self._chunk_size = 3  # Minimum number of chunks to stream at a single time.
-
-        # _generate and _generate_type are linked. _generate will determine
-        # what gets set for _generate_type. _generate_type determines what
-        # function(s) can be used to get the value of the ModelOutputThunk.
-        self._generate: asyncio.Task[None] | None = None
+        self._generate: AsyncIterator[Any] | None = None
         self._generate_extra: asyncio.Task[Any] | None = (
             None  # Currently only used by hf.
         )
@@ -242,59 +235,12 @@ class ModelOutputThunk(CBlock):
             assert self.value is not None  # If computed, the value cannot be None.
             return self.value
 
-        # Type of the chunk depends on the backend.
-        chunks: list[Any | None] = []
-
-        # Step 1: collect all immediately available chunks
-        while True:
-            try:
-                item = self._async_queue.get_nowait()
-                chunks.append(item)
-            except asyncio.QueueEmpty:
-                break
-
-        # Step 2: Loop forever until it collects a certain number of chunks or it collects a None (a sentinel value) or an Exception
-        while len(chunks) <= self._chunk_size:
-            if len(chunks) > 0:
-                if chunks[-1] is None or isinstance(chunks[-1], Exception):
-                    break  # Hit sentinel value or an error.
-                # We could switch to relying on the `done` / `finish_reason` field of chunks,
-                # but that forces us to know about the chunk type here. Prefer sentinel values
-                # for now.
-
-            item = await self._async_queue.get()
-            chunks.append(item)
-
-        # Step 3: If Step 2 stopped because of the sentinel value, cancel other tasks
-        if chunks[-1] is None:
-            chunks.pop()  # Remove the sentinel value.
-            self._computed = True
-
-            # Shouldn't be needed, but cancel the Tasks this ModelOutputThunk relied on.
-            if self._generate is not None:
-                self._generate.cancel()
-            if self._generate_extra is not None:
-                # Covers an hf edge case. The task is done generating anything useful but isn't `done` yet.
-                await self._generate_extra
-                self._generate_extra.cancel()
-
-            # If ModelOutputThunks get too bulky, we can do additional cleanup here
-            # and set fields to None.
-
-        elif isinstance(chunks[-1], Exception):
-            # For now, just re-raise the exception.
-            # It's possible that we hit this error after already streaming some
-            # chunks. We should investigate allowing recovery in the future.
-            raise chunks[-1]
-
-        # Step 4: process collected chunks
-        for chunk in chunks:
-            assert self._process is not None
+        assert self._process is not None
+        assert self._post_process is not None
+        async for chunk in self._generate:
             self._process(self, chunk)
 
-        # Step 5: run postprocess
         if self._computed:
-            assert self._post_process is not None
             self._post_process(self)
 
         return self._underlying_value  # type: ignore

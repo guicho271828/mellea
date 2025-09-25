@@ -22,7 +22,6 @@ from mellea.backends.tools import (
     convert_tools_to_json,
 )
 from mellea.backends.types import ModelOption
-from mellea.helpers.async_helpers import send_to_queue
 from mellea.helpers.fancy_logger import FancyLogger
 from mellea.helpers.openai_compatible_helpers import (
     chat_completion_delta_merge,
@@ -295,9 +294,11 @@ class WatsonxAIBackend(FormatterBackend):
             Coroutine[Any, Any, AsyncGenerator] | Coroutine[Any, Any, dict] | None
         ) = None
 
+        output = ModelOutputThunk(None)
+
         stream = model_opts.get(ModelOption.STREAM, False)
         if stream:
-            chat_response = self._model.achat_stream(
+            output._generate = self._model.achat_stream(
                 messages=conversation,
                 tools=formatted_tools,
                 tool_choice_option=(
@@ -308,7 +309,7 @@ class WatsonxAIBackend(FormatterBackend):
                 ),
             )
         else:
-            chat_response = self._model.achat(
+            output._generate = self._model.achat(
                 messages=conversation,
                 tools=formatted_tools,
                 tool_choice_option=(
@@ -319,7 +320,6 @@ class WatsonxAIBackend(FormatterBackend):
                 ),
             )
 
-        output = ModelOutputThunk(None)
         output._context = linearized_context
         output._action = action
         output._model_options = model_opts
@@ -333,19 +333,6 @@ class WatsonxAIBackend(FormatterBackend):
             tools=tools,
             seed=model_opts.get(ModelOption.SEED, None),
         )
-
-        try:
-            # To support lazy computation, will need to remove this create_task and store just the unexecuted coroutine.
-            # We can also support synchronous calls by adding a flag and changing this ._generate function.
-
-            # This function should always be called from a running event loop so we don't have to worry about
-            # scheduling the task to a specific event loop here.
-            output._generate = asyncio.create_task(
-                send_to_queue(chat_response, output._async_queue)
-            )
-        except RuntimeError as e:
-            # Most likely cause is running this function without an event loop present
-            raise e
 
         return output
 

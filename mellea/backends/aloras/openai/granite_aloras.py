@@ -11,7 +11,6 @@ from openai.types.completion import Completion
 from mellea.backends.aloras import Alora
 from mellea.backends.openai import OpenAIAlora, OpenAIBackend
 from mellea.backends.types import ModelOption
-from mellea.helpers.async_helpers import send_to_queue
 from mellea.helpers.fancy_logger import FancyLogger
 from mellea.stdlib.base import ModelOutputThunk
 
@@ -70,9 +69,8 @@ class OpenAIConstraintAlora(OpenAIAlora):
 
             force_yn_args["logit_bias"] = {str(token_Y): 100, str(token_N): 100}
 
-        chat_response: Coroutine[
-            Any, Any, openai.AsyncStream[Completion] | Completion
-        ] = self._backend._async_client.completions.create(
+        output = ModelOutputThunk(None)
+        output._generate = self._backend._async_client.completions.create(
             model=self.name,
             prompt=prompt,
             max_tokens=1,
@@ -81,24 +79,10 @@ class OpenAIConstraintAlora(OpenAIAlora):
             **force_yn_args,
         )  # type: ignore
 
-        output = ModelOutputThunk(None)
         output._meta["alora_name"] = self.name
 
         output._process = processing
         output._post_process = functools.partial(post_processing, backend=self._backend)
-
-        try:
-            # To support lazy computation, will need to remove this create_task and store just the unexecuted coroutine.
-            # We can also support synchronous calls by adding a flag and changing this ._generate function.
-
-            # This function should always be called from a running event loop so we don't have to worry about
-            # scheduling the task to a specific event loop here.
-            output._generate = asyncio.create_task(
-                send_to_queue(chat_response, output._async_queue)
-            )
-        except RuntimeError as e:
-            # Most likely cause is running this function without an event loop present
-            raise e
 
         return output
 

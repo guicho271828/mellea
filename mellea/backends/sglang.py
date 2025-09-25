@@ -32,7 +32,6 @@ from mellea.backends.tools import (
 )
 from mellea.backends.types import ModelOption
 from mellea.backends.utils import extract_model_tool_requests, to_chat
-from mellea.helpers.async_helpers import send_to_queue
 from mellea.helpers.fancy_logger import FancyLogger
 from mellea.stdlib.base import (
     CBlock,
@@ -198,11 +197,11 @@ class LocalSGLangBackend(FormatterBackend):
             #         input_str, sampling_params=sampling_params
             #     )  # type: ignore
 
-            generator = self._model.async_generate(  # type: ignore
+            output = ModelOutputThunk(None)
+
+            output.generate = self._model.async_generate(  # type: ignore
                 input_str, sampling_params=sampling_params
             )  # type: ignore
-
-            output = ModelOutputThunk(None)
             output._context = ctx.render_for_generation()
             output._action = action
             output._model_options = model_options
@@ -215,16 +214,6 @@ class LocalSGLangBackend(FormatterBackend):
                 tools=tools,
                 seed=model_options.get(ModelOption.SEED, None),
             )
-
-            try:
-                # This function should always be called from a running event loop so we don't have to worry about
-                # scheduling the task to a specific event loop here.
-                output._generate = asyncio.create_task(
-                    send_to_queue(generator, output._async_queue)  # type: ignore
-                )
-            except RuntimeError as e:
-                # Most likely cause is running this function without an event loop present.
-                raise e
 
             return output
 

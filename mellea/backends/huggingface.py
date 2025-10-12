@@ -67,7 +67,7 @@ Huggingface backends can initialize themselves from a model string if the transf
 """
 TransformersTorchConfig = tuple[PreTrainedTokenizer, PreTrainedModel, torch.device]
 
-format: int = 1  # typing this variable in order to shadow the global format function and ensure mypy checks for errors
+format: None = None  # typing this variable in order to shadow the global format function and ensure mypy checks for errors
 
 
 @dataclasses.dataclass

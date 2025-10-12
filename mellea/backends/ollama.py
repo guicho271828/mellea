@@ -32,7 +32,7 @@ from mellea.stdlib.base import (
 from mellea.stdlib.chat import Message
 from mellea.stdlib.requirement import ALoraRequirement
 
-format: int = 1  # typing this variable in order to shadow the global format function and ensure mypy checks for errors
+format: None = None  # typing this variable in order to shadow the global format function and ensure mypy checks for errors
 
 
 class OllamaModelBackend(FormatterBackend):

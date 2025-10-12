@@ -51,7 +51,7 @@ if TYPE_CHECKING:
 
 openai_ollama_batching_error = "json: cannot unmarshal array into Go struct field CompletionRequest.prompt of type string"
 
-format: int = 1  # typing this variable in order to shadow the global format function and ensure mypy checks for errors
+format: None = None  # typing this variable in order to shadow the global format function and ensure mypy checks for errors
 
 
 class _ServerType(Enum):

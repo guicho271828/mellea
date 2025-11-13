@@ -138,11 +138,21 @@ class TestPowerup:
     def hello(m: MelleaSession):
         return "hello"
 
+class TestPowerupInherit(TestPowerup):
+    def hello2(m:MelleaSession):
+        return "hello"
+
 
 def test_powerup(m_session):
+
     MelleaSession.powerup(TestPowerup)
 
     assert "hello" == m_session.hello()
+
+    MelleaSession.powerup(TestPowerupInherit)
+
+    assert "hello" == m_session.hello() # check the inheritance is respected
+    assert "hello" == m_session.hello2()
 
 
 if __name__ == "__main__":

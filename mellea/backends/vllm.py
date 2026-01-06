@@ -19,8 +19,6 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Optional
 
 import msgspec  # type:ignore
-import outlines
-import outlines_core
 import torch
 import vllm  # type:ignore
 from transformers import AutoTokenizer, PreTrainedTokenizerBase
@@ -49,8 +47,6 @@ from mellea.stdlib.base import (
 )
 from mellea.stdlib.chat import Message
 from mellea.stdlib.requirement import LLMaJRequirement, Requirement
-
-assert outlines, "outlines needs to be present to make outlines_core work"
 
 format: None = None  # typing this variable in order to shadow the global format function and ensure mypy checks for errors
 
@@ -210,30 +206,24 @@ class LocalVLLMBackend(FormatterBackend):
             self._hf_model_id
         )  # type:ignore
 
-        # See the notes in outlines.models.vllm.adapt_tokenizer for why this is needed.
-        # Note: there is a module named outlines.models.vllm and a function named outlines.models.vllm.vllm .
-        # However, outlines.models import outlines.models.vllm.vllm as vllm,
-        # thus the module outlines.models.vllm becomes inaccessible,
-        # hence the use of importlib to get the module.
-        self._tokenizer_for_outlines: PreTrainedTokenizerBase = importlib.import_module(
-            "outlines.models.vllm"
-        ).adapt_tokenizer(self._tokenizer)
-
     @property
     def _model(self) -> vllm.AsyncLLMEngine:
         """Use model when making generation requests."""
-        el = get_current_event_loop()
+        # 2026/01/06 Masa: Temporarily canceling the mechanism below.
+        # After vllm 0.11.0, start/shutdown_background_loop is gone.
 
-        # vLLM attaches itself to the event loop that is running when instantiated /
-        # the first generate request is made. Thankfully, they provide helpers to
-        # reset that. We do that here if the event loop changes.
-
-        # Most of the time, this should be a no-op. The event loop will only change
-        # if switching between async and sync calls.
-        if el != self._event_loop:
-            self._underlying_model.shutdown_background_loop()
-            self._underlying_model.start_background_loop()
-            self._event_loop = el
+        # el = get_current_event_loop()
+        #
+        # # vLLM attaches itself to the event loop that is running when instantiated /
+        # # the first generate request is made. Thankfully, they provide helpers to
+        # # reset that. We do that here if the event loop changes.
+        #
+        # # Most of the time, this should be a no-op. The event loop will only change
+        # # if switching between async and sync calls.
+        # if el != self._event_loop:
+        #     self._underlying_model.shutdown_background_loop()
+        #     self._underlying_model.start_background_loop()
+        #     self._event_loop = el
 
         return self._underlying_model
 
@@ -320,22 +310,10 @@ class LocalVLLMBackend(FormatterBackend):
             )
 
             if _format is not None:
-                # outlines.generate.json always parses the resulting json into a python dict.
-                # We however want to keep it as a json string for later storing it in ModelOutputThunk
-                schema: dict[str, Any] = _format.model_json_schema()
-                schema_json: str = json.dumps(schema)
-                regex_str: str = outlines_core.fsm.json_schema.build_regex_from_schema(  # type: ignore
-                    schema_json  # type: ignore
-                )  # type: ignore
-
-                from outlines.processors import RegexLogitsProcessor
-
-                logits_processor = RegexLogitsProcessor(
-                    regex_str,
-                    tokenizer=self._tokenizer_for_outlines,  # type: ignore
-                )
-                sampling_params.logits_processors = (
-                    [logits_processor] if logits_processor is not None else []
+                sampling_params.structured_outputs = (
+                    vllm.sampling_params.StructuredOutputsParams(
+                        json=_format.model_json_schema()
+                    )
                 )
 
             # stream = model_options.get(ModelOption.STREAM, False)
@@ -458,20 +436,10 @@ class LocalVLLMBackend(FormatterBackend):
         )
 
         if format is not None:
-            schema: dict[str, Any] = format.model_json_schema()
-            schema_json: str = json.dumps(schema)
-            regex_str: str = outlines_core.fsm.json_schema.build_regex_from_schema(  # type: ignore
-                schema_json  # type: ignore
-            )  # type: ignore
-
-            from outlines.processors import RegexLogitsProcessor
-
-            logits_processor = RegexLogitsProcessor(
-                regex_str,
-                tokenizer=self._tokenizer_for_outlines,  # type: ignore
-            )
-            sampling_params.logits_processors = (
-                [logits_processor] if logits_processor is not None else []
+            sampling_params.structured_outputs = (
+                vllm.sampling_params.StructuredOutputsParams(
+                    json=format.model_json_schema()
+                )
             )
 
         async def generate(prompt, request_id):

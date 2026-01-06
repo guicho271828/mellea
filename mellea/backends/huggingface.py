@@ -18,8 +18,9 @@ from copy import deepcopy
 from typing import TYPE_CHECKING, Any, cast
 
 import granite_common
-import outlines
-import outlines_core
+import llguidance
+import llguidance.hf
+import llguidance.torch
 import peft
 import torch
 from transformers import (
@@ -27,6 +28,7 @@ from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
     DynamicCache,
+    LogitsProcessorList,
     PreTrainedModel,
     PreTrainedTokenizer,
     set_seed,
@@ -69,8 +71,6 @@ from mellea.stdlib.chat import Message
 from mellea.stdlib.intrinsics.intrinsic import Intrinsic
 from mellea.stdlib.requirement import ALoraRequirement, LLMaJRequirement, Requirement
 
-assert outlines, "outlines needs to be present to make outlines_core work"
-
 """A configuration type for the unhappy path: Tokenizer * Model * torch device string
 
 Huggingface backends can initialize themselves from a model string if the transformers `Auto*` classes can be used. Therefore, a TransformersTorchConfig usually isn't required. However, sometimes a model needs special care to instantiate properly, or a custom device type needs to bse used. Instead of trying to do a lot of partial magic, we basically have two modaliites: either the constructor can figure out everything from the model_id, or the user has to provide an entire config.
@@ -88,6 +88,38 @@ class HFAloraCacheInfo:
     merged_token_ids: Any
     merged_attention: Any
     q_end: int = -1
+
+
+# modified from VLLM v0.9.2 code base
+# https://github.com/vllm-project/vllm/blob/v0.9.2/vllm/model_executor/guided_decoding/guidance_logits_processors.py
+class _GuidanceLogitsProcessor:
+    def __init__(self, grammar: str, ll_tokenizer: llguidance.LLTokenizer) -> None:
+        self.grammar = grammar
+        self.ll_tokenizer = ll_tokenizer
+        self.ll_matcher = llguidance.LLMatcher(self.ll_tokenizer, self.grammar)
+        self.bitmask = llguidance.torch.allocate_token_bitmask(
+            1, self.ll_tokenizer.vocab_size
+        )  # type: ignore[attr-defined]
+        self.new_sampling = False
+        self.initialized = False
+
+    def __call__(self, input_ids: list[int], scores: torch.Tensor) -> torch.Tensor:
+        if self.new_sampling and len(input_ids) > 0:
+            self.ll_matcher.consume_token(  # type: ignore[attr-defined]
+                input_ids[-1]
+            )
+            err = self.ll_matcher.get_error()  # type: ignore[attr-defined]
+            if err:
+                FancyLogger.get_logger().warning("Error in LLMatcher: %s", err)
+
+        llguidance.torch.fill_next_token_bitmask(self.ll_matcher, self.bitmask, 0)
+        llguidance.torch.apply_token_bitmask_inplace(
+            scores, self.bitmask.to(scores.device)
+        )  # type: ignore[attr-defined]
+
+        self.new_sampling = True
+
+        return scores
 
 
 class LocalHFBackend(FormatterBackend, AdapterMixin):
@@ -177,6 +209,10 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 )
             case _:
                 self._tokenizer, self._model, self._device = custom_config
+
+        self._llguidance_tokenizer: llguidance.LLTokenizer = (
+            llguidance.hf.from_tokenizer(self._tokenizer)  # type:ignore
+        )
 
         self._use_caches = use_caches
         self._cache = cache if cache is not None else SimpleLRUCache(3)
@@ -763,24 +799,15 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
             format_kwargs = {}
             if _format:
-                # outlines.generate.json always parses the resulting json into a python dict.
-                # We however want to keep it as a json string for later storing it in ModelOutputThunk
                 schema: dict[str, Any] = _format.model_json_schema()
-                schema_json: str = json.dumps(schema)
-                regex_str: str = outlines_core.fsm.json_schema.build_regex_from_schema(  # type: ignore
-                    schema_json
+                grammar: str = llguidance.LLMatcher.grammar_from_json_schema(
+                    schema, defaults={"whitespace_flexible": False}
                 )
-
-                from outlines.models.transformers import TransformerTokenizer
-                from outlines.processors.structured import RegexLogitsProcessor
-                from transformers import LogitsProcessorList
-
+                logits_processor = _GuidanceLogitsProcessor(
+                    grammar, self._llguidance_tokenizer
+                )
                 format_kwargs["logits_processor"] = LogitsProcessorList(
-                    [
-                        RegexLogitsProcessor(
-                            regex_str, tokenizer=TransformerTokenizer(self._tokenizer)
-                        )
-                    ]
+                    [logits_processor]
                 )
 
             streaming_kwargs = {}
@@ -990,25 +1017,14 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
         format_kwargs = {}
         if format:
-            # outlines.generate.json always parses the resulting json into a python dict.
-            # We however want to keep it as a json string for later storing it in ModelOutputThunk
             schema: dict[str, Any] = format.model_json_schema()
-            schema_json: str = json.dumps(schema)
-            regex_str: str = outlines_core.fsm.json_schema.build_regex_from_schema(  # type: ignore
-                schema_json
+            grammar: str = llguidance.LLMatcher.grammar_from_json_schema(
+                schema, defaults={"whitespace_flexible": False}
             )
-
-            from outlines.models.transformers import TransformerTokenizer
-            from outlines.processors.structured import RegexLogitsProcessor
-            from transformers import LogitsProcessorList
-
-            format_kwargs["logits_processor"] = LogitsProcessorList(
-                [
-                    RegexLogitsProcessor(
-                        regex_str, tokenizer=TransformerTokenizer(self._tokenizer)
-                    )
-                ]
+            logits_processor = _GuidanceLogitsProcessor(
+                grammar, self._llguidance_tokenizer
             )
+            format_kwargs["logits_processor"] = LogitsProcessorList([logits_processor])
 
         outputs = await asyncio.to_thread(
             self._generate_with_adapter_lock,

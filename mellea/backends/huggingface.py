@@ -653,24 +653,15 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
             format_kwargs = {}
             if _format:
-                # outlines.generate.json always parses the resulting json into a python dict.
-                # We however want to keep it as a json string for later storing it in ModelOutputThunk
                 schema: dict[str, Any] = _format.model_json_schema()
-                schema_json: str = json.dumps(schema)
-                regex_str: str = outlines_core.fsm.json_schema.build_regex_from_schema(  # type: ignore
-                    schema_json
+                grammar: str = llguidance.LLMatcher.grammar_from_json_schema(
+                    schema, defaults={"whitespace_flexible": False}
                 )
-
-                from outlines.models.transformers import TransformerTokenizer
-                from outlines.processors.structured import RegexLogitsProcessor
-                from transformers import LogitsProcessorList
-
+                logits_processor = _GuidanceLogitsProcessor(
+                    grammar, self._llguidance_tokenizer
+                )
                 format_kwargs["logits_processor"] = LogitsProcessorList(
-                    [
-                        RegexLogitsProcessor(
-                            regex_str, tokenizer=TransformerTokenizer(self._tokenizer)
-                        )
-                    ]
+                    [logits_processor]
                 )
 
             streaming_kwargs = {}

@@ -68,7 +68,7 @@ hf = [
 ]
 
 vllm = [
-    "vllm",
+    "vllm>=0.13.0",
 ]
 
 litellm = [

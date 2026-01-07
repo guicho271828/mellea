@@ -193,6 +193,8 @@ class LocalVLLMBackend(FormatterBackend):
 
         # Keep track of the event loop the engine was instantiated in.
         self._event_loop = get_current_event_loop()
+        # we store the engine args because we have to reset the engine with a different event loop. See _model .
+        self.engine_args = engine_args
 
         self._tokenizer: PreTrainedTokenizerBase = AutoTokenizer.from_pretrained(
             self._hf_model_id
@@ -203,19 +205,25 @@ class LocalVLLMBackend(FormatterBackend):
         """Use model when making generation requests."""
         # 2026/01/06 Masa: Temporarily canceling the mechanism below.
         # After vllm 0.11.0, start/shutdown_background_loop is gone.
+        # 2026/01/07 Masa: Rewrote it to reinstantiate the engine.
 
-        # el = get_current_event_loop()
-        #
-        # # vLLM attaches itself to the event loop that is running when instantiated /
-        # # the first generate request is made. Thankfully, they provide helpers to
-        # # reset that. We do that here if the event loop changes.
-        #
-        # # Most of the time, this should be a no-op. The event loop will only change
-        # # if switching between async and sync calls.
-        # if el != self._event_loop:
-        #     self._underlying_model.shutdown_background_loop()
-        #     self._underlying_model.start_background_loop()
-        #     self._event_loop = el
+        el = get_current_event_loop()
+
+        # vLLM attaches itself to the event loop that is running when instantiated /
+        # the first generate request is made. Thankfully, they provide helpers to
+        # reset that. We do that here if the event loop changes.
+
+        # Most of the time, this should be a no-op. The event loop will only change
+        # if switching between async and sync calls.
+        if el != self._event_loop:
+            FancyLogger.get_logger().warning("restarting the vllm event loop")
+            # self._underlying_model.shutdown_background_loop()
+            # self._underlying_model.start_background_loop()
+            self._underlying_model.shutdown()
+            self._underlying_model = vllm.AsyncLLMEngine.from_engine_args(
+                vllm.AsyncEngineArgs(model=self._hf_model_id, **self.engine_args)
+            )
+            self._event_loop = el
 
         return self._underlying_model
 

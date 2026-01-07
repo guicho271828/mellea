@@ -95,27 +95,48 @@ class HFAloraCacheInfo:
 class _GuidanceLogitsProcessor:
     def __init__(self, grammar: str, ll_tokenizer: llguidance.LLTokenizer) -> None:
         self.grammar = grammar
-        self.ll_tokenizer = ll_tokenizer
-        self.ll_matcher = llguidance.LLMatcher(self.ll_tokenizer, self.grammar)
-        self.bitmask = llguidance.torch.allocate_token_bitmask(
-            1, self.ll_tokenizer.vocab_size
-        )  # type: ignore[attr-defined]
-        self.new_sampling = False
-        self.initialized = False
+        self.vocab_size: int = ll_tokenizer.vocab_size
+        self.ll_tokenizer: llguidance.LLTokenizer = ll_tokenizer
+        self.ll_matchers: list[llguidance.LLMatcher] = []
+        self.bitmasks: list[torch.Tensor] = []
+        self.new_sampling: bool = False
+        self.batch_size: int = -1
 
-    def __call__(self, input_ids: list[int], scores: torch.Tensor) -> torch.Tensor:
-        if self.new_sampling and len(input_ids) > 0:
-            self.ll_matcher.consume_token(  # type: ignore[attr-defined]
-                input_ids[-1]
-            )
-            err = self.ll_matcher.get_error()  # type: ignore[attr-defined]
-            if err:
-                FancyLogger.get_logger().warning("Error in LLMatcher: %s", err)
+    def __call__(
+        self, batch_input_ids: torch.Tensor, batch_scores: torch.Tensor
+    ) -> torch.Tensor:
+        i_batch, i_seqlen = batch_input_ids.shape
+        s_batch, s_vocab = batch_scores.shape
+        assert i_batch == s_batch
+        assert s_vocab == self.vocab_size
 
-        llguidance.torch.fill_next_token_bitmask(self.ll_matcher, self.bitmask, 0)
-        llguidance.torch.apply_token_bitmask_inplace(
-            scores, self.bitmask.to(scores.device)
-        )  # type: ignore[attr-defined]
+        if self.batch_size != i_batch:
+            self.batch_size = i_batch
+            self.bitmasks = [
+                llguidance.torch.allocate_token_bitmask(1, self.vocab_size)  # type: ignore[attr-defined]
+                for _ in range(self.batch_size)
+            ]
+
+            self.ll_matchers = [
+                llguidance.LLMatcher(self.ll_tokenizer, self.grammar)
+                for _ in range(self.batch_size)
+            ]
+
+        for input_ids, scores, ll_matcher, bitmask in zip(
+            batch_input_ids, batch_scores, self.ll_matchers, self.bitmasks
+        ):
+            if self.new_sampling and len(input_ids) > 0:
+                ll_matcher.consume_token(  # type: ignore[attr-defined]
+                    input_ids.tolist()[-1]
+                )
+                err = ll_matcher.get_error()  # type: ignore[attr-defined]
+                if err:
+                    FancyLogger.get_logger().warning("Error in LLMatcher: %s", err)
+
+            llguidance.torch.fill_next_token_bitmask(ll_matcher, bitmask, 0)
+            llguidance.torch.apply_token_bitmask_inplace(
+                scores, bitmask.to(scores.device)
+            )  # type: ignore[attr-defined]
 
         self.new_sampling = True
 

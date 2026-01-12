@@ -15,8 +15,8 @@ import inspect
 import json
 import os
 import shutil
-from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, Optional
+from collections.abc import Callable, Sequence
+from typing import TYPE_CHECKING, Any, Optional, overload
 
 import msgspec  # type:ignore
 import torch
@@ -37,6 +37,7 @@ from mellea.helpers.async_helpers import get_current_event_loop, send_to_queue
 from mellea.helpers.event_loop_helper import _run_async_in_thread
 from mellea.helpers.fancy_logger import FancyLogger
 from mellea.stdlib.base import (
+    C,
     CBlock,
     Component,
     Context,
@@ -229,14 +230,14 @@ class LocalVLLMBackend(FormatterBackend):
 
     async def generate_from_context(
         self,
-        action: Component | CBlock,
+        action: Component[C] | CBlock,
         ctx: Context,
         *,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         generate_logs: list[GenerateLog] | None = None,
         tool_calls: bool = False,
-    ) -> tuple[ModelOutputThunk, Context]:
+    ) -> tuple[ModelOutputThunk[C], Context]:
         """Generate using the huggingface model."""
         await self.do_generate_walk(action)
 
@@ -257,14 +258,14 @@ class LocalVLLMBackend(FormatterBackend):
 
     async def _generate_from_context_standard(
         self,
-        action: Component | CBlock,
+        action: Component[C] | CBlock,
         ctx: Context,
         *,
         _format: type[BaseModelSubclass] | None = None,
         model_options: dict[str, Any],
         generate_logs: list[GenerateLog] | None = None,
         tool_calls: bool = False,
-    ) -> ModelOutputThunk:
+    ) -> ModelOutputThunk[C]:
         # Construct input.
         # If the Context is a ChatHistory then we will pretty-print each content as a message and then use apply_chat_template.
         # Otherwise, we will linearize the context and treat it as a raw input.
@@ -387,8 +388,6 @@ class LocalVLLMBackend(FormatterBackend):
             "ModelOutputThunks should have their model_opts assigned during generation"
         )
 
-        self.formatter.parse(mot._action, mot)
-
         # Generate the log for this ModelOutputThunk.
         generate_log = GenerateLog()
         generate_log.prompt = conversation
@@ -407,9 +406,31 @@ class LocalVLLMBackend(FormatterBackend):
 
         mot._generate_log = generate_log
 
+    @overload
     async def generate_from_raw(
         self,
-        actions: list[Component | CBlock],
+        actions: list[Component[C]],
+        ctx: Context,
+        *,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+    ) -> list[ModelOutputThunk[C]]: ...
+
+    @overload
+    async def generate_from_raw(
+        self,
+        actions: list[Component[C] | CBlock],
+        ctx: Context,
+        *,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+    ) -> list[ModelOutputThunk[C | str]]: ...
+
+    async def generate_from_raw(
+        self,
+        actions: Sequence[Component[C] | CBlock],
         ctx: Context,
         *,
         format: type[BaseModelSubclass] | None = None,
@@ -417,7 +438,7 @@ class LocalVLLMBackend(FormatterBackend):
         tool_calls: bool = False,
     ) -> list[ModelOutputThunk]:
         """Generate using the completions api. Gives the input provided to the model without templating."""
-        await self.do_generate_walks(actions)
+        await self.do_generate_walks(list(actions))
 
         if tool_calls:
             FancyLogger.get_logger().warning(
@@ -455,8 +476,12 @@ class LocalVLLMBackend(FormatterBackend):
         results = [ModelOutputThunk(value=text) for text in decoded_results]
 
         for i, result in enumerate(results):
-            self.formatter.parse(actions[i], result)
             date = datetime.datetime.now()
+
+            action = actions[i]
+            result.parsed_repr = (
+                action.parse(result) if isinstance(action, Component) else result.value
+            )
 
             generate_log = GenerateLog()
             generate_log.prompt = prompts[i]
@@ -468,7 +493,7 @@ class LocalVLLMBackend(FormatterBackend):
                 "format": format,
                 "seed": model_options.get(ModelOption.SEED, None),
             }
-            generate_log.action = actions[i]
+            generate_log.action = action
             generate_log.result = results[i]
             result._generate_log = generate_log
 

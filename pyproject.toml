@@ -68,7 +68,7 @@ hf = [
 ]
 
 vllm = [
-    "vllm>=0.13.0",
+    "vllm>=0.13.0; sys_platform != 'darwin'",
 ]
 
 litellm = [

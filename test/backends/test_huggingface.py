@@ -2,6 +2,7 @@ import asyncio
 import faulthandler
 import os
 import random
+import sys
 import time
 from collections.abc import Coroutine
 from copy import copy
@@ -410,6 +411,9 @@ async def test_generate_with_lock(backend):
 
 
 @pytest.mark.qualitative
+@pytest.mark.skipif(
+    sys.version_info < (3, 11), reason="asyncio.timeout requires python3.11 or higher"
+)
 async def test_generate_with_lock_does_not_block_when_awaiting_value(backend):
     """This is a tricky test to setup.
 

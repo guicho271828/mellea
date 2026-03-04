@@ -302,7 +302,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         self._generation_lock = threading.Lock()
         """Used to force generation requests to be non-concurrent. Necessary for preventing issues with adapters."""
 
-    def _make_dc_cache(self, toks, **model_options):
+    def _make_dynamic_cache(self, toks, **model_options) -> DynamicCache:
         dc = DynamicCache()
         with torch.no_grad():
             dc = self._model(
@@ -608,7 +608,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                             f"HF backend is caching a CBlock with hashed contents: {hash(c.value)} ({c.value[:3]}..{c.value[-3:]})"
                         )
                         tokens = self._tokenizer(c.value, return_tensors="pt")
-                        self._cached_blocks[c.value] = self._make_dc_cache(tokens)
+                        self._cached_blocks[c.value] = self._make_dynamic_cache(tokens)
                         cached_block_keys.append(c.value)
                 case _:
                     continue
@@ -647,14 +647,14 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 )
                 str_parts.append(prefix)
                 tok_parts.append(self._tokenizer(prefix, return_tensors="pt"))
-                dc_parts.append(self._make_dc_cache(tok_parts[-1]))
+                dc_parts.append(self._make_dynamic_cache(tok_parts[-1]))
             # Add the cached CBlock to str+tok+dc parts.
             FancyLogger.get_logger().debug(
                 f"Replacing a substring with previously computed/retrieved cache with hahs value {hash(key)} ({key[:3]}..{key[-3:]})"
             )
             # str_parts.append(key)
             # tok_parts.append(self._tokenizer(key, return_tensors="pt"))
-            # dc_parts.append(self._make_dc_cache(tok_parts[-1])) # TODO this is wrong.
+            # dc_parts.append(self._make_dynamic_cache(tok_parts[-1])) # TODO this is wrong.
             str_parts.append(key)
             tok_parts.append(self._tokenizer(key, return_tensors="pt"))
             dc_parts.append(self._cached_blocks[key])
@@ -667,7 +667,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             )  # type: ignore
             str_parts.append(current_suffix)
             tok_parts.append(self._tokenizer(current_suffix, return_tensors="pt"))
-            dc_parts.append(self._make_dc_cache(tok_parts[-1]))
+            dc_parts.append(self._make_dynamic_cache(tok_parts[-1]))
 
         # Smash together the caches, the input_ids, and the attention masks.
         assert "".join(str_parts) == input_text, (

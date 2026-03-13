@@ -22,40 +22,121 @@
         "tab": "Docs",
         "groups": [
           {
-            "group": "Introduction",
+            "group": "Getting Started",
             "pages": [
-              "overview/mellea-welcome",
-              "overview/architecture",
-              "overview/generative-programming"
+              "getting-started/installation",
+              "getting-started/quickstart"
             ]
           },
           {
-            "group": "Quick Start",
+            "group": "Tutorials",
             "pages": [
-              "overview/overview",
-              "core-concept/requirements",
-              "core-concept/instruct-validate-repair",
-              "core-concept/modeloptions"
+              "tutorials/01-your-first-generative-program",
+              "tutorials/02-streaming-and-async",
+              "tutorials/03-using-generative-slots",
+              "tutorials/04-making-agents-reliable",
+              "tutorials/05-mifying-legacy-code"
             ]
           },
           {
-            "group": "Core Concepts",
+            "group": "Concepts",
             "pages": [
-              "core-concept/generative-slots",
-              "core-concept/mobjects",
-              "core-concept/context-management",
-              "core-concept/agents",
-              "core-concept/prompt-engineering"
+              "concepts/generative-programming",
+              "concepts/generative-functions",
+              "concepts/instruct-validate-repair",
+              "concepts/requirements-system",
+              "concepts/architecture-vs-agents",
+              "concepts/context-and-sessions",
+              "concepts/mobjects-and-mify"
             ]
           },
           {
-            "group": "Extending Mellea",
+            "group": "How-To",
             "pages": [
-              "core-concept/tuning",
-              "core-concept/adapters",
-              "core-concept/alora",
-              "core-concept/interoperability",
-              "core-concept/plugins"
+              "guide/generative-functions",
+              "guide/tools-and-agents",
+              "guide/working-with-data",
+              "guide/backends-and-configuration",
+              "guide/act-and-aact",
+              "guide/m-decompose",
+              "how-to/use-async-and-streaming",
+              "how-to/use-context-and-sessions",
+              "how-to/enforce-structured-output",
+              "how-to/write-custom-verifiers",
+              "how-to/configure-model-options",
+              "how-to/use-images-and-vision",
+              "how-to/build-a-rag-pipeline",
+              "how-to/refactor-prompts-with-cli",
+              "how-to/unit-test-generative-code"
+            ]
+          },
+          {
+            "group": "Examples",
+            "pages": [
+              "examples/index",
+              "examples/data-extraction-pipeline",
+              "examples/legacy-code-integration",
+              "examples/resilient-rag-fallback",
+              "examples/traced-generation-loop"
+            ]
+          },
+          {
+            "group": "Integrations",
+            "pages": [
+              "integrations/ollama",
+              "integrations/huggingface",
+              "integrations/vllm",
+              "integrations/openai",
+              "integrations/vertex-ai",
+              "integrations/bedrock",
+              "integrations/watsonx",
+              "integrations/mcp",
+              "integrations/langchain",
+              "integrations/smolagents",
+              "integrations/m-serve"
+            ]
+          },
+          {
+            "group": "Evaluation and Observability",
+            "pages": [
+              "evaluation-and-observability/handling-exceptions",
+              "evaluation-and-observability/metrics-and-telemetry",
+              "evaluation-and-observability/opentelemetry-tracing",
+              "evaluation-and-observability/evaluate-with-llm-as-a-judge"
+            ]
+          },
+          {
+            "group": "Advanced",
+            "pages": [
+              "advanced/intrinsics",
+              "advanced/lora-and-alora-adapters",
+              "advanced/prefix-caching-and-kv-blocks",
+              "advanced/inference-time-scaling",
+              "advanced/security-and-taint-tracking",
+              "advanced/mellea-core-internals",
+              "advanced/template-formatting",
+              "advanced/custom-components"
+            ]
+          },
+          {
+            "group": "Community",
+            "pages": [
+              "community/contributing-guide",
+              "community/building-extensions",
+              "community/code-of-conduct"
+            ]
+          },
+          {
+            "group": "Reference",
+            "pages": [
+              "guide/glossary"
+            ]
+          },
+          {
+            "group": "Troubleshooting",
+            "pages": [
+              "troubleshooting/common-errors",
+              "troubleshooting/faq"
             ]
           }
         ]
@@ -321,7 +402,7 @@
       },
       {
         "label": "Contribution Guide",
-        "href": "/core-concept/contribution-guide"
+        "href": "https://github.com/generative-computing/mellea/blob/main/CONTRIBUTING.md"
       },
       {
         "label": "Support",
@@ -331,5 +412,31 @@
   },
   "search": {
     "prompt": "Search documentation..."
-  }
+  },
+  "feedback": {
+    "thumbsRating": true
+  },
+  "redirects": [
+    { "source": "/overview/overview", "destination": "/getting-started/quickstart" },
+    { "source": "/overview/mellea-welcome", "destination": "/concepts/generative-programming" },
+    { "source": "/overview/generative-programming", "destination": "/concepts/generative-programming" },
+    { "source": "/overview/architecture", "destination": "/guide/backends-and-configuration" },
+    { "source": "/core-concept/instruct-validate-repair", "destination": "/concepts/instruct-validate-repair" },
+    { "source": "/core-concept/requirements", "destination": "/concepts/requirements-system" },
+    { "source": "/core-concept/generative-slots", "destination": "/guide/generative-functions" },
+    { "source": "/core-concept/mobjects", "destination": "/concepts/mobjects-and-mify" },
+    { "source": "/core-concept/agents", "destination": "/guide/tools-and-agents" },
+    { "source": "/core-concept/context-management", "destination": "/how-to/use-context-and-sessions" },
+    { "source": "/core-concept/alora", "destination": "/advanced/lora-and-alora-adapters" },
+    { "source": "/core-concept/tuning", "destination": "/advanced/lora-and-alora-adapters" },
+    { "source": "/core-concept/modeloptions", "destination": "/how-to/configure-model-options" },
+    { "source": "/core-concept/interoperability", "destination": "/integrations/mcp" },
+    { "source": "/integrations/mcp-and-m-serve", "destination": "/integrations/mcp" },
+    { "source": "/core-concept/adapters", "destination": "/guide/tools-and-agents" },
+    { "source": "/core-concept/contribution-guide", "destination": "/guide/CONTRIBUTING" },
+    { "source": "/core-concept/prompt-engineering", "destination": "/advanced/mellea-core-internals" },
+    { "source": "/integrations/bedrock-and-watsonx", "destination": "/integrations/bedrock" },
+    { "source": "/integrations/huggingface-and-vllm", "destination": "/integrations/huggingface" },
+    { "source": "/integrations/langchain-and-smolagents", "destination": "/integrations/langchain" }
+  ]
 }

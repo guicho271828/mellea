@@ -402,8 +402,6 @@ def _print_quality_report(issues: list[dict]) -> None:
         for item in sorted(items, key=lambda x: x["path"]):
             print(f"  {item['path']}")
             print(f"    {item['detail']}")
-            if _IN_GHA:
-                _gha_cmd("error", label, f"{item['path']} — {item['detail']}")
 
 
 def audit_nav_orphans(docs_dir: Path, source_dir: Path) -> list[str]:
@@ -701,11 +699,15 @@ def main():
         failed = True
 
     if _IN_GHA:
-        if quality_issues:
+        if not args.quality:
             _gha_cmd(
-                "error" if (args.fail_on_quality and quality_issues) else "warning",
+                "notice", "Docstring quality", "skipped (pass --quality to enable)"
+            )
+        elif quality_issues:
+            _gha_cmd(
+                "error" if args.fail_on_quality else "warning",
                 "Docstring quality",
-                f"{len(quality_issues)} issue(s) found — run audit_coverage.py --quality locally for details",
+                f"{len(quality_issues)} issue(s) found — see job summary for details",
             )
         else:
             _gha_cmd(

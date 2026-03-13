@@ -126,5 +126,14 @@ class FancyLogger:
             # stream_handler.setLevel(logging.INFO)
             stream_handler.setFormatter(CustomFormatter(datefmt="%H:%M:%S,%03d"))
             logger.addHandler(stream_handler)
+
+            # Add OTLP handler if enabled
+            from ..telemetry import get_otlp_log_handler
+
+            otlp_handler = get_otlp_log_handler()
+            if otlp_handler:
+                otlp_handler.setFormatter(JsonFormatter())
+                logger.addHandler(otlp_handler)
+
             FancyLogger.logger = logger
         return FancyLogger.logger

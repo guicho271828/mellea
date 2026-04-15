@@ -96,10 +96,23 @@ mkdir -p .bob && ln -s ../.agents/skills .bob/skills
 
 Pre-commit runs: ruff, mypy, uv-lock, codespell
 
-## 7. Timing
+For AI attribution trailers, see [Section 7 (AI Attribution)](#7-ai-attribution).
+
+## 7. AI Attribution
+
+Commits require a Signed-off-by trailer from the human author (added by running `git commit -s`). AI agents must not add a Signed-off-by in the tool's own name — instead, always add an `Assisted-by:` trailer to the commit footer:
+
+```text
+Assisted-by: Claude Code
+Assisted-by: IBM Bob
+```
+
+Use the tool's common name (e.g., GitHub Copilot, Cursor, etc.).
+
+## 8. Timing
 > **Don't cancel**: `pytest` (full) and `pre-commit --all-files` may take minutes. Canceling mid-run can corrupt state.
 
-## 8. Common Issues
+## 9. Common Issues
 | Problem | Fix |
 |---------|-----|
 | `ComponentParseError` | Add examples to docstring |
@@ -107,14 +120,14 @@ Pre-commit runs: ruff, mypy, uv-lock, codespell
 | Ollama refused | Run `ollama serve` |
 | Telemetry import errors | Run `uv sync` to install OpenTelemetry deps |
 
-## 9. Self-Review (before notifying user)
+## 10. Self-Review (before notifying user)
 1. `uv run pytest test/ -m "not qualitative"` passes?
 2. `ruff format` and `ruff check` clean?
 3. New functions typed with concise docstrings?
 4. Unit tests added for new functionality?
 5. Avoided over-engineering?
 
-## 10. Writing Tests
+## 11. Writing Tests
 
 - Place tests in `test/` mirroring source structure
 - Name files `test_*.py` (required for pydocstyle)
@@ -122,7 +135,7 @@ Pre-commit runs: ruff, mypy, uv-lock, codespell
 - Mark tests checking LLM output quality with `@pytest.mark.qualitative`
 - If a test fails, fix the **code**, not the test (unless the test was wrong)
 
-## 11. Writing Docs
+## 12. Writing Docs
 
 If you are modifying or creating pages under `docs/docs/`, follow the writing
 conventions in [`docs/docs/guide/CONTRIBUTING.md`](docs/docs/guide/CONTRIBUTING.md).
@@ -140,11 +153,11 @@ Key rules that differ from typical Markdown habits:
   mellea source; mark forward-looking content with `> **Coming soon:**`
 - **No visible TODOs** — if content is missing, open a GitHub issue instead
 
-## 12. Feedback Loop
+## 13. Feedback Loop
 
 Found a bug, workaround, or pattern? Update the docs:
 
-- **Issue/workaround?** → Add to Section 7 (Common Issues) in this file
+- **Issue/workaround?** → Add to [Section 9 (Common Issues)](#9-common-issues) in this file
 - **Usage pattern?** → Add to [`docs/AGENTS_TEMPLATE.md`](docs/AGENTS_TEMPLATE.md)
 - **New pitfall?** → Add warning near relevant section
 
